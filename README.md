@@ -1,51 +1,46 @@
 # granny
 
-https://learn.microsoft.com/en-us/legal/cognitive-services/openai/data-privacy
+Cloud tools collection — AWS infrastructure, CDN, DNS, and DevOps automation.
 
-{
-"name":"ContentLogging",
-"value":"false"
-}
-
-# setup
+## Install
 
 ```shell
-sudo apt-get install terraform
-pip install boto3  # Required for Python scripts
+uv sync
 ```
 
-# deploy
+## CLI
 
 ```shell
-terraform init
-terraform plan
-terraform apply
+granny --help
+granny analyze vpcs               # list VPCs across regions
+granny analyze lambdas            # list Lambdas across regions
+granny cdn purge <pull-zone-id>   # purge Bunny CDN cache
+granny credentials status         # show which secrets are set
 ```
 
-# Available Scripts
+## Configuration
 
-## AWS VPC Listing
+Secrets are read from environment variables. Create a `.env` in your working
+directory; it is loaded automatically.
 
-List all VPCs in your AWS account:
+```
+BUNNY_API_KEY=...
+CLOUDFLARE_API_TOKEN=...
+HETZNER_S3_ACCESS_KEY=...
+# ...
+```
+
+See `CLAUDE.md` for the full list of registered names.
+
+## Standalone scripts
+
+`tools/create/` contains setup scripts for S3+CloudFront, Bunny Storage,
+Scaleway FaaS, Mailjet DNS, WorkMail, and more. Run them directly:
 
 ```shell
-# Using Bash
-./list-vpcs.sh
-
-# Using Python
-./list-vpcs.py
+python tools/create/setup_s3_website.py example.com --help
 ```
 
-## AWS Lambda Listing
+## License
 
-List all Lambda functions across all AWS regions with their runtime versions:
-
-```shell
-# Using Bash
-./list-lambdas.sh
-
-# Using Python
-./list-lambdas.py
-```
-
-Both scripts provide information about Lambda functions including their names, runtime environments (Node.js or Python versions), and function versions across all AWS regions.
+See `LICENSE`.
