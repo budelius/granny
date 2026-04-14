@@ -1,30 +1,28 @@
-"""`granny create ...` -- thin dispatch over tools/create/*.py.
+"""`granny create ...` -- dispatch over granny/create/*.py.
 
-Each subcommand loads the matching script from tools/create/ and invokes its
-argparse ``main()`` with forwarded argv. The goal is to expose every capability
-that lived under tools/create as first-class `granny create <thing>` commands
-without duplicating their logic.
+Each subcommand loads the matching script from the in-package ``granny.create``
+module and invokes its argparse ``main()`` with forwarded argv. Scripts live
+inside the package so the CLI is self-contained (no external ``tools/`` dir).
 
-Adding a new command: drop the script in tools/create/ and add an entry to
-``COMMANDS`` below.
+Adding a new command: drop the script in ``granny/create/`` and add an entry
+to ``COMMANDS`` below.
 """
 
 from __future__ import annotations
 
-import importlib.util
+import importlib
 import sys
 from pathlib import Path
 from types import ModuleType
 
 import click
 
-# Repo root is three parents up: granny/cli/create.py -> granny/cli -> granny -> repo
-_REPO_ROOT = Path(__file__).resolve().parents[2]
-_CREATE_DIR = _REPO_ROOT / "tools" / "create"
+_CREATE_DIR = Path(__file__).resolve().parent.parent / "create"
 
-# subcommand name -> script filename (relative to tools/create/)
+# subcommand name -> script filename (relative to granny/create/)
 COMMANDS: dict[str, str] = {
     "aws-cloudfront": "setup_aws_cloudfront.py",
+    "bunny-edge-script": "setup_bunny_edge_script.py",
     "bunny-storage": "setup_bunny_storage.py",
     "cognito-identity-pool": "setup_cognito_identity_pool.py",
     "hetzner-bunny": "setup_hetzner_bunny.py",
@@ -39,27 +37,16 @@ COMMANDS: dict[str, str] = {
 
 
 def _load_script(filename: str) -> ModuleType:
-    """Import a script from tools/create/ by filename."""
+    """Import a script from granny.create by filename."""
     path = _CREATE_DIR / filename
     if not path.is_file():
         raise click.ClickException(f"Script not found: {path}")
 
-    module_name = f"granny._create_scripts.{path.stem}"
-    if module_name in sys.modules:
-        return sys.modules[module_name]
-
-    spec = importlib.util.spec_from_file_location(module_name, path)
-    if spec is None or spec.loader is None:
-        raise click.ClickException(f"Cannot load {path}")
-
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[module_name] = module
-    # Make tools/create/ itself importable so scripts can sibling-import helpers.
-    create_dir_str = str(_CREATE_DIR)
-    if create_dir_str not in sys.path:
-        sys.path.insert(0, create_dir_str)
-    spec.loader.exec_module(module)
-    return module
+    module_name = f"granny.create.{path.stem}"
+    try:
+        return importlib.import_module(module_name)
+    except Exception as exc:
+        raise click.ClickException(f"Cannot load {module_name}: {exc}") from exc
 
 
 def _make_command(name: str, filename: str) -> click.Command:
@@ -73,7 +60,7 @@ def _make_command(name: str, filename: str) -> click.Command:
             "help_option_names": [],  # let the script's own -h/--help through
         },
         help=(
-            f"Run tools/create/{filename}. All arguments are forwarded; "
+            f"Run granny/create/{filename}. All arguments are forwarded; "
             f"use `-- --help` to see the script's own flags."
         ),
     )
@@ -100,7 +87,7 @@ def _make_command(name: str, filename: str) -> click.Command:
 
 @click.group()
 def create() -> None:
-    """Provision and configure cloud resources (wraps tools/create/)."""
+    """Provision and configure cloud resources."""
 
 
 for _name, _filename in COMMANDS.items():

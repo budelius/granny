@@ -61,6 +61,36 @@ def _register_commands() -> None:
         cli.add_command(create)
     except ImportError:
         pass
+    try:
+        from granny.cli.docker import docker
+        cli.add_command(docker)
+    except ImportError:
+        pass
+    try:
+        from granny.cli.dns import dns
+        cli.add_command(dns)
+    except ImportError:
+        pass
+    try:
+        from granny.cli.storage import storage
+        cli.add_command(storage)
+    except ImportError:
+        pass
+    try:
+        from granny.cli.edge import edge
+        cli.add_command(edge)
+    except ImportError:
+        pass
+    try:
+        from granny.cli.serverless import serverless
+        cli.add_command(serverless)
+    except ImportError:
+        pass
+    try:
+        from granny.cli.email import email
+        cli.add_command(email)
+    except ImportError:
+        pass
 
 
 _register_commands()
