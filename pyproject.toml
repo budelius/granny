@@ -1,5 +1,5 @@
 [project]
-name = "granny"
+name = "granny-devops"
 version = "0.2.0"
 description = "Cloud tools collection -- AWS infrastructure, CDN, and DevOps automation"
 readme = "README.md"
@@ -47,7 +47,7 @@ browser = [
 ]
 # Full install (everything)
 all = [
-    "granny[cdn,data,ml,browser]",
+    "granny-devops[cdn,data,ml,browser]",
     "azure-identity>=1.23.0",
     "boto3-stubs>=1.40",
     "certifi>=2025.6.15",

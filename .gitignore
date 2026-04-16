@@ -61,6 +61,7 @@ vaultwarden-import-*.csv
 # Deployment-local secret overrides
 .deploy.env
 .env.*
+!.env.example
 
 # Build artifacts
 /dist/
