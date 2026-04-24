@@ -17,6 +17,8 @@ dependencies = [
 # Development and release tooling
 dev = [
     "hatch>=1.14",
+    "prek>=0.2",
+    "pytest>=8.3",
     "ruff>=0.11",
     "twine>=6.1",
 ]
