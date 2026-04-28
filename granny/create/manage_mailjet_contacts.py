@@ -41,12 +41,10 @@ Usage:
 """
 
 import os
-import sys
-import time
 import logging
 import argparse
 import requests
-from typing import Optional, Dict, List
+from typing import Optional, List
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -347,14 +345,14 @@ def action_check(client: MailjetContactClient, args) -> int:
 
             blocked = [m for m in messages if m.get('Status') == 'blocked']
             if bounced or blocked:
-                logging.info(f"\n  This contact is HARD BOUNCE BLOCKED by Mailjet.")
-                logging.info(f"  To clear the bounce and allow emails again, run:")
+                logging.info("\n  This contact is HARD BOUNCE BLOCKED by Mailjet.")
+                logging.info("  To clear the bounce and allow emails again, run:")
                 logging.info(f"  python manage_mailjet_contacts.py --action clear-bounce --email {args.email}")
                 return 0
 
     excluded = contact.get("IsExcludedFromCampaigns", False)
     if excluded:
-        logging.info(f"\n  To unblock (campaign exclusion), run:")
+        logging.info("\n  To unblock (campaign exclusion), run:")
         logging.info(f"  python manage_mailjet_contacts.py --action unblock --email {args.email}")
 
     return 0
@@ -379,7 +377,7 @@ def action_unblock(client: MailjetContactClient, args) -> int:
         logging.info(f"  Contact is already active (not blocked): {args.email}")
         return 0
 
-    logging.info(f"  Current status: BLOCKED (IsExcludedFromCampaigns=true)")
+    logging.info("  Current status: BLOCKED (IsExcludedFromCampaigns=true)")
 
     if args.dry_run:
         logging.info(f"  [DRY RUN] Would unblock: {args.email}")
@@ -391,7 +389,7 @@ def action_unblock(client: MailjetContactClient, args) -> int:
 
     if not new_excluded:
         logging.info(f"  [OK] Successfully unblocked: {args.email}")
-        logging.info(f"  Contact can now receive Mailjet emails.")
+        logging.info("  Contact can now receive Mailjet emails.")
     else:
         logging.error(f"  [FAIL] Contact still blocked after update: {args.email}")
         return 1
@@ -511,7 +509,7 @@ def action_clear_bounce(client: MailjetContactClient, args) -> int:
 
     if deleted:
         logging.info(f"  [OK] Contact deleted. Bounce block cleared for: {args.email}")
-        logging.info(f"  Next email to this address will create a fresh contact.")
+        logging.info("  Next email to this address will create a fresh contact.")
     else:
         logging.error(f"  [FAIL] Could not delete contact: {args.email}")
         return 1
@@ -573,7 +571,7 @@ def action_bulk_unblock(client: MailjetContactClient, args) -> int:
             logging.error(f"  [FAIL] Error unblocking {email}: {e}")
             failed += 1
 
-    logging.info(f"\n--- Summary ---")
+    logging.info("\n--- Summary ---")
     logging.info(f"  Unblocked: {success}")
     logging.info(f"  Skipped (already active): {skipped}")
     logging.info(f"  Not found: {not_found}")

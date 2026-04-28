@@ -1,7 +1,6 @@
 """CLI commands for AWS resource analysis."""
 
 import json
-import sys
 
 import click
 

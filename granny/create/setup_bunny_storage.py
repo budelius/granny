@@ -41,15 +41,21 @@ Usage Examples:
 """
 
 import os
-import json
 import time
 import logging
 import argparse
 import requests
 from abc import ABC, abstractmethod
-from typing import Optional, Dict, List
+from typing import Optional, List
 
 from granny.create.registrars import get_registrar, registrar_choices, ManualRegistrar
+from dotenv import load_dotenv
+load_dotenv()
+try:
+    from granny.credentials import load_secrets_into_env
+    load_secrets_into_env()
+except Exception:
+    pass
 
 # Optional imports for DNS providers
 Cloudflare = None
@@ -60,14 +66,6 @@ except ImportError:
 
 # Hetzner DNS is now part of the Hetzner Cloud API (dns.hetzner.com → api.hetzner.cloud).
 # We call it directly with httpx instead of relying on the deprecated hetzner-dns-api lib.
-
-from dotenv import load_dotenv
-load_dotenv()
-try:
-    from granny.credentials import load_secrets_into_env
-    load_secrets_into_env()
-except Exception:
-    pass
 
 
 # =============================================================================
@@ -217,7 +215,7 @@ class HetznerDNSProvider(DNSProvider):
         return resp.json() if resp.text else {}
 
     def get_zone_id(self, zone_name: str) -> str:
-        data = self._request("GET", f"/zones", params={"name": zone_name})
+        data = self._request("GET", "/zones", params={"name": zone_name})
         for zone in data.get("zones", []):
             if zone["name"] == zone_name:
                 logging.info(f"Found Hetzner DNS zone: {zone_name} (id={zone['id']})")
@@ -330,8 +328,8 @@ class DeSECDNSProvider(DNSProvider):
         try:
             self._api_request("GET", f"/domains/{zone_name}/")
             return zone_name
-        except:
-            raise Exception(f"Zone not found in deSEC: {zone_name}")
+        except Exception as exc:
+            raise Exception(f"Zone not found in deSEC: {zone_name}") from exc
 
     def _create_or_update_rrset(self, domain: str, subname: str, record_type: str,
                                 records: list, ttl: int = 3600) -> None:
@@ -351,7 +349,7 @@ class DeSECDNSProvider(DNSProvider):
     def _delete_rrset(self, domain: str, subname: str, record_type: str) -> None:
         try:
             self._api_request("DELETE", f"/domains/{domain}/rrsets/{subname}.../{record_type}/")
-        except:
+        except Exception:
             pass
 
     def create_cname_record(self, zone_id: str, name: str, target: str,
@@ -1139,8 +1137,8 @@ class SetupReport:
             f"# CDN Setup Report: {self.domain}",
             "",
             f"**Generated:** {self.timestamp}",
-            f"**Script:** setup_bunny_storage.py",
-            f"**Infrastructure:** Bunny Storage + Bunny CDN",
+            "**Script:** setup_bunny_storage.py",
+            "**Infrastructure:** Bunny Storage + Bunny CDN",
             "",
             "---",
             "",
@@ -1695,11 +1693,11 @@ def main():
             report.write_deploy_env(args.deploy_env)
 
         if test_success or args.skip_tests:
-            logging.info(f"\n[OK] CDN setup completed successfully!")
+            logging.info("\n[OK] CDN setup completed successfully!")
             logging.info(f"[i] Setup report: {report_path}")
             return 0
         else:
-            logging.warning(f"\n[!] CDN setup completed but tests indicate issues.")
+            logging.warning("\n[!] CDN setup completed but tests indicate issues.")
             logging.info(f"[i] Setup report: {report_path}")
             return 1
 
@@ -1711,7 +1709,7 @@ def main():
         try:
             report_path = report.save_report(args.report_dir)
             logging.info(f"[i] Partial report saved: {report_path}")
-        except:
+        except Exception:
             pass
 
         return 1

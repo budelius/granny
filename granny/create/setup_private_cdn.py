@@ -51,7 +51,6 @@ Output:
 import argparse
 import csv
 import io
-import json
 import logging
 import os
 import sys
@@ -204,7 +203,7 @@ def step_create_pull_zone(bucket: str, region: str, hostname: str,
         logger.info(f"Pull zone exists: {pull_zone_name} (ID: {pz_id})")
     elif dry_run:
         logger.info(f"[DRY RUN] Would create pull zone '{pull_zone_name}' -> {origin_url}")
-        logger.info(f"[DRY RUN] Would enable token authentication")
+        logger.info("[DRY RUN] Would enable token authentication")
         logger.info(f"[DRY RUN] Would add hostname '{hostname}'")
         return None, None
     else:
@@ -351,16 +350,16 @@ def print_results(args, endpoint: str, pull_zone_id: int, token_key: str) -> Non
 
     logger.info("")
     logger.info("Signed URL pattern:")
-    logger.info(f"  hash = base64url(sha256(token_key + url_path + expires))")
+    logger.info("  hash = base64url(sha256(token_key + url_path + expires))")
     logger.info(f"  url  = https://{hostname}/path?token={{hash}}&expires={{ts}}")
 
     logger.info("")
     logger.info("Python example:")
-    logger.info(f'  import hashlib, base64, time')
-    logger.info(f'  expires = int(time.time()) + 3600')
-    logger.info(f'  path = "/tenant/export/file.pdf"')
-    logger.info(f'  raw = hashlib.sha256(f"{{token_key}}{{path}}{{expires}}".encode()).digest()')
-    logger.info(f'  token = base64.b64encode(raw).decode().replace("+","-").replace("/","_").rstrip("=")')
+    logger.info('  import hashlib, base64, time')
+    logger.info('  expires = int(time.time()) + 3600')
+    logger.info('  path = "/tenant/export/file.pdf"')
+    logger.info('  raw = hashlib.sha256(f"{token_key}{path}{expires}".encode()).digest()')
+    logger.info('  token = base64.b64encode(raw).decode().replace("+","-").replace("/","_").rstrip("=")')
     logger.info(f'  url = f"https://{hostname}{{path}}?token={{token}}&expires={{expires}}"')
 
 
@@ -462,7 +461,7 @@ def main():
         filled = sum(1 for _, v, _ in settings if v)
         empty = sum(1 for _, v, _ in settings if not v)
         logger.info(f"  {filled} values from env, {empty} empty (fill before import)")
-        logger.info(f"\nImport: Vaultwarden UI -> Tools -> Import Data -> Bitwarden (csv)")
+        logger.info("\nImport: Vaultwarden UI -> Tools -> Import Data -> Bitwarden (csv)")
         logger.info(f"DELETE {csv_path} after import!")
         return
 
@@ -535,8 +534,8 @@ def main():
             ]
             generate_vault_csv(settings, vault_folder, csv_path)
             logger.info(f"\nVaultwarden CSV: {csv_path}")
-            logger.info(f"  Import: Vaultwarden UI -> Tools -> Import Data -> Bitwarden (csv)")
-            logger.info(f"  DELETE the CSV after import!")
+            logger.info("  Import: Vaultwarden UI -> Tools -> Import Data -> Bitwarden (csv)")
+            logger.info("  DELETE the CSV after import!")
     elif args.dry_run:
         logger.info("\nDry run complete. Re-run without --dry-run to execute.")
     else:

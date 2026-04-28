@@ -15,7 +15,6 @@ Supports both specific domain and wildcard certificate creation (ACM only).
 """
 
 import argparse
-import json
 import os
 import sys
 import time
@@ -1036,7 +1035,7 @@ class BunnyCDNCertificateProvider:
         """
         print(f"Requesting SSL certificate for '{hostname}'...")
         if use_dns01:
-            print(f"  Using DNS01 validation (useOnlyHttp01=false)")
+            print("  Using DNS01 validation (useOnlyHttp01=false)")
 
         for attempt in range(1, max_retries + 1):
             params = f"hostname={hostname}"
@@ -1143,7 +1142,7 @@ class BunnyCDNCertificateProvider:
             print(f"  Warning: Could not create edge rule: {result.get('message')}")
             return False
 
-        print(f"  Edge rule created successfully.")
+        print("  Edge rule created successfully.")
         print(f"  Note: HTTP traffic to {apex_domain} will redirect to https://{www_domain}")
         return True
 
@@ -1272,13 +1271,13 @@ class BunnyCertificateAutomation:
             )
 
             if not supports_cname_flattening:
-                print(f"\n[!] APEX DOMAIN LIMITATION DETECTED")
+                print("\n[!] APEX DOMAIN LIMITATION DETECTED")
                 print(f"   '{self.hostname}' is an apex/root domain.")
                 if self.dns_provider:
                     print(f"   DNS provider '{self.dns_provider}' does not support CNAME flattening.")
                 else:
-                    print(f"   Most DNS providers don't support CNAME flattening at apex.")
-                print(f"   Bunny CDN cannot validate SSL for apex domains without CNAME flattening.")
+                    print("   Most DNS providers don't support CNAME flattening at apex.")
+                print("   Bunny CDN cannot validate SSL for apex domains without CNAME flattening.")
                 print()
 
                 if self.setup_apex_redirect:
@@ -1291,7 +1290,7 @@ class BunnyCertificateAutomation:
                             self.pull_zone_id, self.hostname, www_domain
                         )
                     else:
-                        print(f"   Apex redirect edge rule already exists.")
+                        print("   Apex redirect edge rule already exists.")
 
                     print()
                     print(f"   [OK] HTTP traffic to {self.hostname} will redirect to https://{www_domain}")
@@ -1299,10 +1298,10 @@ class BunnyCertificateAutomation:
                     print()
                     return True  # Apex handled via redirect
                 else:
-                    print(f"   To fix this, either:")
-                    print(f"   1. Use Cloudflare as DNS provider (supports CNAME flattening)")
+                    print("   To fix this, either:")
+                    print("   1. Use Cloudflare as DNS provider (supports CNAME flattening)")
                     print(f"   2. Use www.{self.hostname} as your primary domain")
-                    print(f"   3. Run with --setup-apex-redirect to auto-create redirect rule")
+                    print("   3. Run with --setup-apex-redirect to auto-create redirect rule")
                     print()
                     return False
 
@@ -1413,7 +1412,7 @@ class CertificateAutomation:
         # Get zone ID (auto-create if requested and supported)
         if create_zone:
             if not dns_provider.supports_zone_creation():
-                print(f"Warning: DNS provider does not support automatic zone creation.")
+                print("Warning: DNS provider does not support automatic zone creation.")
             self.zone_id = dns_provider.get_or_create_zone(self.base_domain, auto_create=True)
         else:
             self.zone_id = dns_provider.get_zone_id(self.base_domain)
@@ -1504,7 +1503,7 @@ class CertificateAutomation:
                         cname_value = resource_record.get("Value", "").rstrip(".")
 
                         if cname_name and cname_value:
-                            print(f"Found validation records:")
+                            print("Found validation records:")
                             print(f"  CNAME Name: {cname_name}")
                             print(f"  CNAME Value: {cname_value}")
                             return cname_name, cname_value
@@ -1624,7 +1623,7 @@ class CertificateAutomation:
             Certificate ARN
         """
         print(f"\n{'='*60}")
-        print(f"SSL Certificate Automation")
+        print("SSL Certificate Automation")
         print(f"{'='*60}")
         print(f"Domain: {self.cert_domain}")
         print(f"Original domain: {self.domain_name}")
@@ -1862,7 +1861,7 @@ Environment Variables:
 
         else:
             # AWS ACM certificate automation
-            print(f"Using AWS ACM certificate provider")
+            print("Using AWS ACM certificate provider")
             print(f"DNS provider: {args.dns_provider}")
 
             dns_provider = get_dns_provider(args.dns_provider)

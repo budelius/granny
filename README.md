@@ -45,8 +45,14 @@ cd granny-public
 # Install dependencies with uv
 uv sync
 
-# Or install globally
+# Or install globally from PyPI
 pip install granny-devops
+```
+
+Tagged releases are published to both pypi.org and the public GitLab PyPI registry. If PyPI has not propagated a fresh release yet, use the GitLab registry fallback:
+
+```shell
+pip install --extra-index-url https://gitlab.com/api/v4/projects/81189862/packages/pypi/simple granny-devops
 ```
 
 ### Configuration

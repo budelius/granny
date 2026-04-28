@@ -41,7 +41,6 @@ Usage Examples:
 
 import os
 import re
-import json
 import time
 import logging
 import argparse
@@ -457,8 +456,8 @@ class SetupReport:
             f"# Bunny Edge Script Setup Report: {self.name}",
             "",
             f"**Generated:** {self.timestamp}",
-            f"**Script:** setup_bunny_edge_script.py",
-            f"**Infrastructure:** Bunny.net Edge Scripting",
+            "**Script:** setup_bunny_edge_script.py",
+            "**Infrastructure:** Bunny.net Edge Scripting",
             "",
             "---",
             "",
@@ -782,7 +781,7 @@ def main():
             with open(code_path, 'r', encoding='utf-8') as f:
                 code = f.read()
 
-            deploy_result = client.deploy_code(script_id, code)
+            client.deploy_code(script_id, code)
             report.set_component('code', 'deployed',
                                 file=args.code, size_bytes=len(code))
             logging.info(f"Code deployed ({len(code)} bytes)")
@@ -865,7 +864,7 @@ def main():
                                 target=cname_target)
 
             # ---- Step 7: SSL -----------------------------------------------
-            logging.info(f"\n--- Step 7: SSL Certificate ---")
+            logging.info("\n--- Step 7: SSL Certificate ---")
             if args.dns_provider == 'manual':
                 logging.info("SSL will auto-issue once the CNAME record propagates.")
                 report.set_component('ssl', 'skipped',

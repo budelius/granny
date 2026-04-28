@@ -671,7 +671,7 @@ def update_cloudfront_distribution_origin(distribution_id, bucket_name, oac_id):
             distribution_config['DefaultCacheBehavior']['TargetOriginId'] = origin_id
             logging.info(f"Updated default cache behavior to target origin ID: {origin_id}")
         else:
-            logging.warning(f"DefaultCacheBehavior not found in distribution config, skipping target origin update")
+            logging.warning("DefaultCacheBehavior not found in distribution config, skipping target origin update")
 
         # Ensure aliases are properly configured (always ensure aliases are configured)
         aliases_items = distribution_config.get('Aliases', {}).get('Items', [])
@@ -700,7 +700,7 @@ def update_cloudfront_distribution_origin(distribution_id, bucket_name, oac_id):
             )
             
             if not spa_error_exists:
-                logging.info(f"Adding SPA mode error handling to existing distribution")
+                logging.info("Adding SPA mode error handling to existing distribution")
                 distribution_config['CustomErrorResponses'] = {
                     'Quantity': 1,
                     'Items': [{
@@ -711,7 +711,7 @@ def update_cloudfront_distribution_origin(distribution_id, bucket_name, oac_id):
                     }]
                 }
             else:
-                logging.info(f"SPA error handling already configured for distribution")
+                logging.info("SPA error handling already configured for distribution")
 
         # Update the distribution
         update_response = cloudfront_client.update_distribution(
@@ -1205,10 +1205,10 @@ def create_cloudflare_cname_record(cf_client, zone_id, cname_name, cname_content
                     logging.info(f"  Current CNAME content: '{current_content}'")
                     logging.info(f"  Target CNAME content: '{cname_content}'")
                     logging.info(f"  Current proxied: {current_proxied}")
-                    logging.info(f"  Target proxied: False")
+                    logging.info("  Target proxied: False")
 
                     # Check if we need to update it
-                    if current_content != cname_content or current_proxied != False:
+                    if current_content != cname_content or current_proxied:
                         logging.info(f"Updating existing CNAME record '{record_name}' (ID: {record_id})")
                         logging.info(f"  Old target: {current_content} (proxied: {current_proxied})")
                         logging.info(f"  New target: {cname_content} (proxied: False)")
@@ -1298,10 +1298,10 @@ def test_cdn_functionality(domain, timeout=60):
                 # Main test page should return 200 and contain success message
                 if response.status_code == 200:
                     if 'CDN Setup Successful' in response.text:
-                        logging.info(f"✅ Test page test PASSED - Found success message")
+                        logging.info("✅ Test page test PASSED - Found success message")
                         results[url]['validation'] = 'PASSED'
                     else:
-                        logging.warning(f"⚠️  Test page test PARTIAL - Page loaded but missing expected content")
+                        logging.warning("⚠️  Test page test PARTIAL - Page loaded but missing expected content")
                         results[url]['validation'] = 'PARTIAL'
                 else:
                     logging.error(f"❌ Test page test FAILED - Status: {response.status_code}")
@@ -1311,10 +1311,10 @@ def test_cdn_functionality(domain, timeout=60):
                 # Text file should return 200 and contain expected content
                 if response.status_code == 200:
                     if 'CDN test file' in response.text:
-                        logging.info(f"✅ Text file test PASSED - Found expected content")
+                        logging.info("✅ Text file test PASSED - Found expected content")
                         results[url]['validation'] = 'PASSED'
                     else:
-                        logging.warning(f"⚠️  Text file test PARTIAL - File loaded but unexpected content")
+                        logging.warning("⚠️  Text file test PARTIAL - File loaded but unexpected content")
                         results[url]['validation'] = 'PARTIAL'
                 else:
                     logging.error(f"❌ Text file test FAILED - Status: {response.status_code}")
@@ -1326,10 +1326,10 @@ def test_cdn_functionality(domain, timeout=60):
                     # In SPA mode, this should return 200 with index.html content
                     if response.status_code == 200:
                         if 'SPA-Enabled CDN Setup Successful' in response.text:
-                            logging.info(f"✅ SPA 404 redirect test PASSED - Returned index.html with 200")
+                            logging.info("✅ SPA 404 redirect test PASSED - Returned index.html with 200")
                             results[url]['validation'] = 'PASSED'
                         else:
-                            logging.warning(f"⚠️  SPA 404 redirect test PARTIAL - 200 returned but not index.html")
+                            logging.warning("⚠️  SPA 404 redirect test PARTIAL - 200 returned but not index.html")
                             results[url]['validation'] = 'PARTIAL'
                     else:
                         logging.error(f"❌ SPA 404 redirect test FAILED - Status: {response.status_code} (expected 200)")
@@ -1338,10 +1338,10 @@ def test_cdn_functionality(domain, timeout=60):
                     # Normal mode - expect 404 with custom error page
                     if response.status_code == 404:
                         if 'Page Not Found' in response.text:
-                            logging.info(f"✅ 404 error page test PASSED - Custom error page displayed")
+                            logging.info("✅ 404 error page test PASSED - Custom error page displayed")
                             results[url]['validation'] = 'PASSED'
                         else:
-                            logging.warning(f"⚠️  404 error page test PARTIAL - 404 returned but no custom error page")
+                            logging.warning("⚠️  404 error page test PARTIAL - 404 returned but no custom error page")
                             results[url]['validation'] = 'PARTIAL'
                     else:
                         logging.warning(f"⚠️  404 error page test UNEXPECTED - Status: {response.status_code} (expected 404)")
@@ -1354,7 +1354,7 @@ def test_cdn_functionality(domain, timeout=60):
                         logging.info(f"✅ SPA routing test PASSED - '{url}' served index.html")
                         results[url]['validation'] = 'PASSED'
                     else:
-                        logging.warning(f"⚠️  SPA routing test PARTIAL - 200 returned but not index.html")
+                        logging.warning("⚠️  SPA routing test PARTIAL - 200 returned but not index.html")
                         results[url]['validation'] = 'PARTIAL'
                 else:
                     logging.error(f"❌ SPA routing test FAILED - Status: {response.status_code} (expected 200)")
@@ -1369,7 +1369,7 @@ def test_cdn_functionality(domain, timeout=60):
             if 'X-Amz-Cf-Id' in response.headers:
                 logging.info(f"  ✅ CloudFront serving content (X-Amz-Cf-Id: {response.headers['X-Amz-Cf-Id'][:20]}...)")
             else:
-                logging.warning(f"  ⚠️  CloudFront headers not detected")
+                logging.warning("  ⚠️  CloudFront headers not detected")
 
         except requests.exceptions.Timeout:
             logging.error(f"❌ TIMEOUT - Request to {url} timed out after {timeout}s")
@@ -1482,14 +1482,14 @@ def main():
             logging.info(f"Public URL: https://{BUCKET_NAME} (SSL via Cloudflare)")
         else:
             logging.info(f"Public URL: https://{BUCKET_NAME} (SSL via ACM)")
-        logging.info(f"Test URLs:")
+        logging.info("Test URLs:")
         logging.info(f"  - https://{BUCKET_NAME}/index-test.html")
         logging.info(f"  - https://{BUCKET_NAME}/test.txt")
         logging.info("--------------------")
 
         # 10. Test CDN functionality (unless skipped)
         if not SKIP_TESTS:
-            logging.info(f"\nWaiting 30 seconds for DNS/CDN propagation before testing...")
+            logging.info("\nWaiting 30 seconds for DNS/CDN propagation before testing...")
             time.sleep(30)
 
             test_success = test_cdn_functionality(BUCKET_NAME, TEST_TIMEOUT)

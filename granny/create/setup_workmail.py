@@ -62,7 +62,7 @@ import time
 import logging
 import argparse
 import getpass
-from typing import Optional, Dict, List
+from typing import Optional, List
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -600,7 +600,7 @@ class SetupReport:
             f"# WorkMail Setup Report: {self.domain}",
             "",
             f"**Generated:** {self.timestamp}",
-            f"**Script:** setup_workmail.py",
+            "**Script:** setup_workmail.py",
             f"**Action:** {self.action}",
             "",
             "---",
@@ -645,7 +645,7 @@ class SetupReport:
             "## Access Information",
             "",
             f"- **WebMail**: https://mail.{self.domain} (or check WorkMail console for URL)",
-            f"- **AWS Console**: https://console.aws.amazon.com/workmail/",
+            "- **AWS Console**: https://console.aws.amazon.com/workmail/",
             "",
             "---",
             "",
@@ -937,7 +937,7 @@ def action_create_user(wm: WorkMailManager, args) -> int:
 
         logging.info("\n[Next Steps]")
         logging.info(f"1. User can log in at the WorkMail webmail URL for {args.domain}")
-        logging.info(f"2. Check AWS WorkMail console for organization settings")
+        logging.info("2. Check AWS WorkMail console for organization settings")
         if args.forward_to:
             logging.info(f"3. Verify forwarding: send a test email to {args.email}")
         logging.info(f"\n[OK] Setup report: {report_path}")
@@ -1064,7 +1064,7 @@ def action_list_all_regions(args) -> int:
                             user_state = user.get('State', '?')
                             logging.info(f"    - {email} ({user_state})")
                     else:
-                        logging.info(f"    (no users)")
+                        logging.info("    (no users)")
                 except Exception as e:
                     logging.warning(f"    Could not list users: {e}")
 

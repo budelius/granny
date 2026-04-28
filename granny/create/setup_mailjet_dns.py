@@ -46,12 +46,11 @@ Usage:
 """
 
 import os
-import re
 import time
 import logging
 import argparse
 import requests
-from typing import Optional, Dict, List, Tuple
+from typing import Optional, List, Tuple
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -513,7 +512,7 @@ class SetupReport:
             f"# Mailjet DNS Authentication Report: {self.domain}",
             "",
             f"**Generated:** {self.timestamp}",
-            f"**Script:** setup_mailjet_dns.py",
+            "**Script:** setup_mailjet_dns.py",
             f"**DNS Provider:** {self.dns_provider.title()}",
             "",
             "---",
@@ -815,7 +814,7 @@ def run_check(args) -> int:
             for i, issue in enumerate(issues, 1):
                 logging.info(f"    {i}. {issue}")
 
-            logging.info(f"\n  To fix, run:")
+            logging.info("\n  To fix, run:")
             logging.info(f"    python setup_mailjet_dns.py --domain {args.domain} --dmarc")
         else:
             logging.info("\n  All checks passed! Email authentication is properly configured.")
@@ -959,7 +958,7 @@ def main():
             logging.warning("  No DKIM value returned from Mailjet. Skipping DKIM setup.")
             report.set_component('dkim', 'skipped', reason='No DKIM value from Mailjet API')
         elif args.dry_run:
-            logging.info(f"[DRY RUN] Would create DKIM TXT record:")
+            logging.info("[DRY RUN] Would create DKIM TXT record:")
             logging.info(f"  Name: {dkim_name}")
             logging.info(f"  Value: {dkim_value[:60]}...")
             report.set_component('dkim', 'dry_run',
@@ -982,7 +981,7 @@ def main():
             report.set_component('dmarc', 'skipped', reason='Not requested')
         elif args.dry_run:
             dmarc_value = build_dmarc_record(args.dmarc_policy, args.dmarc_rua)
-            logging.info(f"[DRY RUN] Would create DMARC TXT record:")
+            logging.info("[DRY RUN] Would create DMARC TXT record:")
             logging.info(f"  Name: _dmarc.{args.domain}")
             logging.info(f"  Value: {dmarc_value}")
             report.set_component('dmarc', 'dry_run',
@@ -1008,7 +1007,7 @@ def main():
             logging.warning("  No ownership token returned from Mailjet. Skipping.")
             report.set_component('ownership', 'skipped', reason='No token from Mailjet API')
         elif args.dry_run:
-            logging.info(f"[DRY RUN] Would create ownership TXT record:")
+            logging.info("[DRY RUN] Would create ownership TXT record:")
             logging.info(f"  Name: {ownership_record_name or args.domain}")
             logging.info(f"  Value: {ownership_token}")
             report.set_component('ownership', 'dry_run',
@@ -1081,7 +1080,7 @@ def main():
         logging.info(f"2. Verify DKIM: dig +short TXT mailjet._domainkey.{args.domain}")
         if args.dmarc:
             logging.info(f"3. Verify DMARC: dig +short TXT _dmarc.{args.domain}")
-        logging.info(f"4. Check Mailjet dashboard: https://app.mailjet.com/account/sender")
+        logging.info("4. Check Mailjet dashboard: https://app.mailjet.com/account/sender")
         logging.info(f"\n[OK] Setup report: {report_path}")
 
         return 0

@@ -58,10 +58,16 @@ import time
 import logging
 import argparse
 import requests
-import socket
 from abc import ABC, abstractmethod
-from typing import Optional, Dict, List, Tuple
+from typing import Optional, List
 from botocore.config import Config
+from dotenv import load_dotenv
+load_dotenv()
+try:
+    from granny.credentials import load_secrets_into_env
+    load_secrets_into_env()
+except Exception:
+    pass
 
 # Optional imports for DNS providers
 Cloudflare = None
@@ -75,14 +81,6 @@ HetznerDnsRecord = None
 try:
     from hetzner_dns_api import DnsZone as HetznerDnsZone, DnsRecord as HetznerDnsRecord
 except ImportError:
-    pass
-
-from dotenv import load_dotenv
-load_dotenv()
-try:
-    from granny.credentials import load_secrets_into_env
-    load_secrets_into_env()
-except Exception:
     pass
 
 
@@ -431,7 +429,7 @@ class DeSECDNSProvider(DNSProvider):
 
         # Check if record exists
         try:
-            existing = self._api_request("GET", rrset_url)
+            self._api_request("GET", rrset_url)
             # Record exists, update it
             self._api_request("PATCH", rrset_url, {
                 "records": records, "ttl": ttl
@@ -473,7 +471,7 @@ class DeSECDNSProvider(DNSProvider):
     def create_zone(self, zone_name: str) -> str:
         logging.info(f"Creating deSEC zone for '{zone_name}'...")
         self._api_request("POST", "/domains/", {"name": zone_name})
-        logging.info(f"Zone created. Configure nameservers: ns1.desec.io, ns2.desec.org")
+        logging.info("Zone created. Configure nameservers: ns1.desec.io, ns2.desec.org")
         return zone_name
 
     def create_apex_records(self, zone_id: str, apex_domain: str, www_domain: str,
@@ -545,7 +543,7 @@ class HetznerS3Client:
         try:
             self.client.head_bucket(Bucket=bucket_name)
             return True
-        except:
+        except Exception:
             return False
 
     def create_bucket(self, bucket_name: str) -> None:
@@ -793,7 +791,7 @@ class BunnyCDNClient:
         if token_key:
             data["ZoneSecurityKey"] = token_key
 
-        result = self._api_request("POST", f"/pullzone/{pull_zone_id}", data)
+        self._api_request("POST", f"/pullzone/{pull_zone_id}", data)
         logging.info("Token authentication enabled.")
 
         # Fetch updated details to get the security key
@@ -974,7 +972,7 @@ class SetupReport:
         lines.append(f"# CDN Setup Report: {self.domain}")
         lines.append("")
         lines.append(f"**Generated:** {self.timestamp}")
-        lines.append(f"**Script:** setup_hetzner_bunny.py")
+        lines.append("**Script:** setup_hetzner_bunny.py")
         lines.append("")
         lines.append("---")
         lines.append("")
@@ -1066,10 +1064,10 @@ class SetupReport:
         lines.append("1. **Upload your website files** to the S3 bucket")
         if 's3_bucket' in self.components and 'bucket_name' in self.components['s3_bucket']['details']:
             bucket = self.components['s3_bucket']['details']['bucket_name']
-            lines.append(f"   ```bash")
-            lines.append(f"   # Using AWS CLI or S3 tool")
+            lines.append("   ```bash")
+            lines.append("   # Using AWS CLI or S3 tool")
             lines.append(f"   aws s3 sync ./dist s3://{bucket}/ --endpoint-url https://{HETZNER_S3_REGIONS.get(self.region, 'fsn1.your-objectstorage.com')}")
-            lines.append(f"   ```")
+            lines.append("   ```")
         lines.append("")
         lines.append("2. **Purge CDN cache** after uploading new content")
         lines.append("")
@@ -1314,7 +1312,7 @@ def main():
         hostname_details = {'configured_hostnames': []}
 
         if full_domain not in existing_hostnames:
-            result = bunny_client.add_hostname(pull_zone_id, full_domain)
+            bunny_client.add_hostname(pull_zone_id, full_domain)
             hostname_details['configured_hostnames'].append(f"{full_domain} (added)")
         else:
             logging.info(f"Hostname '{full_domain}' already configured.")
@@ -1322,7 +1320,7 @@ def main():
 
         if args.apex and args.www_redirect:
             if www_domain not in existing_hostnames:
-                result = bunny_client.add_hostname(pull_zone_id, www_domain)
+                bunny_client.add_hostname(pull_zone_id, www_domain)
                 hostname_details['configured_hostnames'].append(f"{www_domain} (added)")
             else:
                 logging.info(f"Hostname '{www_domain}' already configured.")
@@ -1457,11 +1455,11 @@ def main():
         report_path = report.save_report(args.report_dir)
 
         if test_success or args.skip_tests:
-            logging.info(f"\n[OK] CDN setup completed successfully!")
+            logging.info("\n[OK] CDN setup completed successfully!")
             logging.info(f"[i] Setup report: {report_path}")
             return 0
         else:
-            logging.warning(f"\n[!] CDN setup completed but tests indicate issues.")
+            logging.warning("\n[!] CDN setup completed but tests indicate issues.")
             logging.info(f"[i] Setup report: {report_path}")
             return 1
 
@@ -1474,7 +1472,7 @@ def main():
         try:
             report_path = report.save_report(args.report_dir)
             logging.info(f"[i] Partial setup report saved: {report_path}")
-        except:
+        except Exception:
             pass
 
         return 1
