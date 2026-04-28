@@ -1,0 +1,25 @@
+# Pre-commit hooks (compatible with `pre-commit` and `prek`).
+#
+# Install once per clone:
+#   prek install
+#
+# Run manually against all files:
+#   prek run --all-files
+
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.12.0
+    hooks:
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format
+
+  - repo: local
+    hooks:
+      - id: pytest
+        name: pytest
+        entry: python scripts/run-tests.py -q
+        language: system
+        pass_filenames: false
+        always_run: true
+        stages: [pre-commit]

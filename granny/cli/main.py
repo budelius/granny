@@ -3,7 +3,6 @@
 Thin wrapper around library functions -- no business logic here.
 """
 
-import sys
 from pathlib import Path
 
 import click

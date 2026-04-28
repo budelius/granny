@@ -9,6 +9,14 @@ import socket
 from abc import ABC, abstractmethod
 from typing import Optional
 
+from dotenv import load_dotenv
+load_dotenv()
+try:
+    from granny.credentials import load_secrets_into_env
+    load_secrets_into_env()
+except Exception:
+    pass
+
 # Optional imports for DNS providers
 Cloudflare = None
 try:
@@ -22,14 +30,6 @@ try:
     from hetzner_dns_api import DnsZone as HetznerDnsZone, DnsRecord as HetznerDnsRecord
 except ImportError:
     pass  # Will be checked when hetzner provider is selected
-
-from dotenv import load_dotenv
-load_dotenv()
-try:
-    from granny.credentials import load_secrets_into_env
-    load_secrets_into_env()
-except Exception:
-    pass
 
 """
 Unified S3 Website CDN Setup Script
@@ -232,8 +232,8 @@ class CloudflareDNSProvider(DNSProvider):
                 for record in existing_records.result:
                     if record.type == 'CNAME':
                         cname_record_exists = True
-                        if record.content != target or record.proxied != False:
-                            logging.info(f"Updating existing CNAME record")
+                        if record.content != target or record.proxied:
+                            logging.info("Updating existing CNAME record")
                             self.client.dns.records.update(
                                 zone_id=zone_id, dns_record_id=record.id, **dns_record
                             )
@@ -998,12 +998,12 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 logging.info("=== CDN Setup Configuration ===")
 logging.info(f"Domain: {DOMAIN_NAME}")
 if APEX_MODE:
-    logging.info(f"Mode: Apex domain (production)")
+    logging.info("Mode: Apex domain (production)")
     logging.info(f"Apex Domain: {BUCKET_NAME}")
     logging.info(f"WWW Domain: {WWW_DOMAIN}")
     logging.info(f"WWW Redirect: {WWW_REDIRECT}")
 else:
-    logging.info(f"Mode: Subdomain")
+    logging.info("Mode: Subdomain")
     logging.info(f"Subdomain: {SUBDOMAIN}")
     logging.info(f"Full domain: {BUCKET_NAME}")
 logging.info(f"AWS Region: {AWS_REGION}")
@@ -1319,7 +1319,7 @@ def find_certificate_covering_domains(domains):
                 logging.info(f"  Covered domains: {covered_domains}")
                 return cert_arn
 
-        logging.info(f"No existing certificate covers all required domains")
+        logging.info("No existing certificate covers all required domains")
         return None
 
     except Exception as e:
@@ -1430,7 +1430,7 @@ def setup_dns_validation(cf_client, zone_name, validation_input):
         return zone_id, created_records
     except Exception as e:
         if "already exists" in str(e):
-            logging.warning(f"DNS record already exists.")
+            logging.warning("DNS record already exists.")
             return None, None
         logging.error(f"Cloudflare API error: {e}")
         raise
@@ -1641,7 +1641,7 @@ def update_cloudfront_distribution_origin(distribution_id, bucket_name, oac_id):
             distribution_config['DefaultCacheBehavior']['TargetOriginId'] = origin_id
             logging.info(f"Updated default cache behavior to target origin ID: {origin_id}")
         else:
-            logging.warning(f"DefaultCacheBehavior not found in distribution config, skipping target origin update")
+            logging.warning("DefaultCacheBehavior not found in distribution config, skipping target origin update")
 
         # Ensure aliases are properly configured (always ensure aliases are configured)
         aliases_items = distribution_config.get('Aliases', {}).get('Items', [])
@@ -1670,7 +1670,7 @@ def update_cloudfront_distribution_origin(distribution_id, bucket_name, oac_id):
             )
             
             if not spa_error_exists:
-                logging.info(f"Adding SPA mode error handling to existing distribution")
+                logging.info("Adding SPA mode error handling to existing distribution")
                 distribution_config['CustomErrorResponses'] = {
                     'Quantity': 1,
                     'Items': [{
@@ -1681,7 +1681,7 @@ def update_cloudfront_distribution_origin(distribution_id, bucket_name, oac_id):
                     }]
                 }
             else:
-                logging.info(f"SPA error handling already configured for distribution")
+                logging.info("SPA error handling already configured for distribution")
 
         # Update the distribution
         update_response = cloudfront_client.update_distribution(
@@ -2195,10 +2195,10 @@ def create_cloudflare_cname_record(cf_client, zone_id, cname_name, cname_content
                     logging.info(f"  Current CNAME content: '{current_content}'")
                     logging.info(f"  Target CNAME content: '{cname_content}'")
                     logging.info(f"  Current proxied: {current_proxied}")
-                    logging.info(f"  Target proxied: False")
+                    logging.info("  Target proxied: False")
 
                     # Check if we need to update it
-                    if current_content != cname_content or current_proxied != False:
+                    if current_content != cname_content or current_proxied:
                         logging.info(f"Updating existing CNAME record '{record_name}' (ID: {record_id})")
                         logging.info(f"  Old target: {current_content} (proxied: {current_proxied})")
                         logging.info(f"  New target: {cname_content} (proxied: False)")
@@ -2344,7 +2344,7 @@ def create_cloudfront_www_redirect_function(apex_domain, distribution_id):
             )
 
             if already_attached:
-                logging.info(f"Function already attached to distribution")
+                logging.info("Function already attached to distribution")
                 return True
 
             # Add function association
@@ -2369,16 +2369,16 @@ def create_cloudfront_www_redirect_function(apex_domain, distribution_id):
                 IfMatch=etag,
                 DistributionConfig=config
             )
-            logging.info(f"CloudFront Function attached to distribution")
+            logging.info("CloudFront Function attached to distribution")
 
             # Wait for distribution to deploy
-            logging.info(f"Waiting for distribution to deploy (this may take 3-5 minutes)...")
+            logging.info("Waiting for distribution to deploy (this may take 3-5 minutes)...")
             waiter = cloudfront_client.get_waiter('distribution_deployed')
             waiter.wait(
                 Id=distribution_id,
                 WaiterConfig={'Delay': 15, 'MaxAttempts': 40}
             )
-            logging.info(f"Distribution deployed with www redirect function")
+            logging.info("Distribution deployed with www redirect function")
 
         return True
 
@@ -2502,10 +2502,10 @@ def test_cdn_functionality(domain, timeout=60):
                 # Main test page should return 200 and contain success message
                 if response.status_code == 200:
                     if 'CDN Setup Successful' in response.text:
-                        logging.info(f"✅ Test page test PASSED - Found success message")
+                        logging.info("✅ Test page test PASSED - Found success message")
                         results[url]['validation'] = 'PASSED'
                     else:
-                        logging.warning(f"⚠️  Test page test PARTIAL - Page loaded but missing expected content")
+                        logging.warning("⚠️  Test page test PARTIAL - Page loaded but missing expected content")
                         results[url]['validation'] = 'PARTIAL'
                 else:
                     logging.error(f"❌ Test page test FAILED - Status: {response.status_code}")
@@ -2515,10 +2515,10 @@ def test_cdn_functionality(domain, timeout=60):
                 # Text file should return 200 and contain expected content
                 if response.status_code == 200:
                     if 'CDN test file' in response.text:
-                        logging.info(f"✅ Text file test PASSED - Found expected content")
+                        logging.info("✅ Text file test PASSED - Found expected content")
                         results[url]['validation'] = 'PASSED'
                     else:
-                        logging.warning(f"⚠️  Text file test PARTIAL - File loaded but unexpected content")
+                        logging.warning("⚠️  Text file test PARTIAL - File loaded but unexpected content")
                         results[url]['validation'] = 'PARTIAL'
                 else:
                     logging.error(f"❌ Text file test FAILED - Status: {response.status_code}")
@@ -2530,10 +2530,10 @@ def test_cdn_functionality(domain, timeout=60):
                     # In SPA mode, this should return 200 with index.html content
                     if response.status_code == 200:
                         if 'SPA-Enabled CDN Setup Successful' in response.text:
-                            logging.info(f"✅ SPA 404 redirect test PASSED - Returned index.html with 200")
+                            logging.info("✅ SPA 404 redirect test PASSED - Returned index.html with 200")
                             results[url]['validation'] = 'PASSED'
                         else:
-                            logging.warning(f"⚠️  SPA 404 redirect test PARTIAL - 200 returned but not index.html")
+                            logging.warning("⚠️  SPA 404 redirect test PARTIAL - 200 returned but not index.html")
                             results[url]['validation'] = 'PARTIAL'
                     else:
                         logging.error(f"❌ SPA 404 redirect test FAILED - Status: {response.status_code} (expected 200)")
@@ -2542,10 +2542,10 @@ def test_cdn_functionality(domain, timeout=60):
                     # Normal mode - expect 404 with custom error page
                     if response.status_code == 404:
                         if 'Page Not Found' in response.text:
-                            logging.info(f"✅ 404 error page test PASSED - Custom error page displayed")
+                            logging.info("✅ 404 error page test PASSED - Custom error page displayed")
                             results[url]['validation'] = 'PASSED'
                         else:
-                            logging.warning(f"⚠️  404 error page test PARTIAL - 404 returned but no custom error page")
+                            logging.warning("⚠️  404 error page test PARTIAL - 404 returned but no custom error page")
                             results[url]['validation'] = 'PARTIAL'
                     else:
                         logging.warning(f"⚠️  404 error page test UNEXPECTED - Status: {response.status_code} (expected 404)")
@@ -2558,7 +2558,7 @@ def test_cdn_functionality(domain, timeout=60):
                         logging.info(f"✅ SPA routing test PASSED - '{url}' served index.html")
                         results[url]['validation'] = 'PASSED'
                     else:
-                        logging.warning(f"⚠️  SPA routing test PARTIAL - 200 returned but not index.html")
+                        logging.warning("⚠️  SPA routing test PARTIAL - 200 returned but not index.html")
                         results[url]['validation'] = 'PARTIAL'
                 else:
                     logging.error(f"❌ SPA routing test FAILED - Status: {response.status_code} (expected 200)")
@@ -2573,7 +2573,7 @@ def test_cdn_functionality(domain, timeout=60):
             if 'X-Amz-Cf-Id' in response.headers:
                 logging.info(f"  ✅ CloudFront serving content (X-Amz-Cf-Id: {response.headers['X-Amz-Cf-Id'][:20]}...)")
             else:
-                logging.warning(f"  ⚠️  CloudFront headers not detected")
+                logging.warning("  ⚠️  CloudFront headers not detected")
 
         except requests.exceptions.Timeout:
             logging.error(f"❌ TIMEOUT - Request to {url} timed out after {timeout}s")
@@ -2783,7 +2783,7 @@ def main():
 
         # 8. Test CDN functionality (unless skipped)
         if not SKIP_TESTS:
-            logging.info(f"\nWaiting 30 seconds for DNS/CDN propagation before testing...")
+            logging.info("\nWaiting 30 seconds for DNS/CDN propagation before testing...")
             time.sleep(30)
 
             test_success = test_cdn_functionality(BUCKET_NAME, TEST_TIMEOUT)

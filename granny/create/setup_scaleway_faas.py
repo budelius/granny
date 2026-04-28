@@ -37,7 +37,7 @@ import time
 import logging
 import argparse
 import requests
-from typing import Optional, Dict, List
+from typing import Optional, List
 from abc import ABC, abstractmethod
 
 from dotenv import load_dotenv
@@ -174,8 +174,8 @@ class DeSECDNSProvider(DNSProvider):
         try:
             self._api_request("GET", f"/domains/{zone_name}/")
             return zone_name
-        except:
-            raise Exception(f"Zone not found in deSEC: {zone_name}")
+        except Exception as exc:
+            raise Exception(f"Zone not found in deSEC: {zone_name}") from exc
 
     def create_cname_record(self, zone_id: str, name: str, target: str,
                            zone_name: str, ttl: int = 300) -> None:
@@ -185,11 +185,11 @@ class DeSECDNSProvider(DNSProvider):
         # Delete conflicting records
         try:
             self._api_request("DELETE", f"/domains/{zone_id}/rrsets/{name}/A/")
-        except:
+        except Exception:
             pass
         try:
             self._api_request("DELETE", f"/domains/{zone_id}/rrsets/{name}/AAAA/")
-        except:
+        except Exception:
             pass
 
         data = {
@@ -201,7 +201,7 @@ class DeSECDNSProvider(DNSProvider):
 
         try:
             self._api_request("PATCH", f"/domains/{zone_id}/rrsets/{name}/CNAME/", {"records": [target_with_dot], "ttl": max(ttl, self.MIN_TTL)})
-        except:
+        except Exception:
             self._api_request("POST", f"/domains/{zone_id}/rrsets/", data)
 
         logging.info("CNAME record created/updated.")
@@ -308,7 +308,7 @@ class ClouDNSDNSProvider(DNSProvider):
                         "domain-name": zone_name,
                         "record-id": existing["id"]
                     })
-                except:
+                except Exception:
                     pass
 
         # Create new CNAME
@@ -712,8 +712,8 @@ class SetupReport:
             f"# Scaleway FaaS Setup Report: {self.name}",
             "",
             f"**Generated:** {self.timestamp}",
-            f"**Script:** setup_scaleway_faas.py",
-            f"**Infrastructure:** Scaleway Functions",
+            "**Script:** setup_scaleway_faas.py",
+            "**Infrastructure:** Scaleway Functions",
             "",
             "---",
             "",
@@ -1155,7 +1155,7 @@ def main():
         try:
             report_path = report.save_report(args.report_dir)
             logging.info(f"[i] Partial report saved: {report_path}")
-        except:
+        except Exception:
             pass
 
         return 1

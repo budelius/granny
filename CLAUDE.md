@@ -40,6 +40,12 @@ CLI: `granny credentials get <NAME>` | `granny credentials status`
 ## Workflow
 
 - Search before editing; follow existing patterns.
-- Run `ruff check .` before committing.
+- Install hooks once per clone: `prek install` (runs ruff + pytest on commit).
+- Run manually: `prek run --all-files`.
 - Test AWS-touching scripts with `--dry-run` where available.
 - `.env` must stay gitignored.
+
+## Release
+
+- Bash:       `./scripts/release.sh <patch|minor|major>`
+- PowerShell: `./scripts/release.ps1 <patch|minor|major>`
