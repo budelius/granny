@@ -1,509 +1,173 @@
-# Granny Cloud Tools Collection - Project Guidelines
+# Granny — Contributor Guidelines
 
-## 🚀 Project Overview
+Engineering conventions for working on `granny-devops` itself. For end-user
+documentation see [`README.md`](README.md). For AI-agent conventions see
+[`CLAUDE.md`](CLAUDE.md).
 
-Welcome to the Granny Cloud Tools Collection! This project provides a comprehensive suite of AWS infrastructure management and DevOps automation tools designed to simplify cloud operations and improve deployment workflows.
+## Scope and shape
 
-## 📋 Table of Contents
+Granny is a single Python package (`granny`, distributed as `granny-devops`)
+exposing a `granny` CLI. It wraps a handful of cloud APIs behind small,
+focused subpackages:
 
-1. [Project Purpose](#project-purpose)
-2. [Architecture Overview](#architecture-overview)
-3. [Development Guidelines](#development-guidelines)
-4. [Security Standards](#security-standards)
-5. [Tool-Specific Guidelines](#tool-specific-guidelines)
-6. [Testing and Quality Assurance](#testing-and-quality-assurance)
-7. [Deployment Best Practices](#deployment-best-practices)
-8. [Troubleshooting Guide](#troubleshooting-guide)
-9. [Contributing Guidelines](#contributing-guidelines)
+| Subpackage | What lives here |
+|---|---|
+| `granny.analyze` | Read-only AWS inventory (VPCs, Lambdas) |
+| `granny.cdn` | Bunny CDN client (pull zones, edge rules, SSL, cache) |
+| `granny.cli` | Click command groups — thin wrappers over library code |
+| `granny.cloudflare` | Cloudflare account-level resources (Workers, D1, R2, KV) |
+| `granny.create` | Standalone setup scripts dispatched via `granny create <name>` |
+| `granny.credentials` | Env-var + optional Vaultwarden secret resolution |
+| `granny.dns` | Provider-agnostic DNS CRUD (cloudflare, bunny, hetzner, desec, cloudns, inwx, manual) |
+| `granny.docker` | Multi-arch buildx with hash-derived tags |
+| `granny.edge` | Bunny Edge Scripting |
+| `granny.email` | Mailjet, AWS WorkMail, SES forwarding |
+| `granny.serverless` | Scaleway FaaS |
+| `granny.storage` | AWS S3, Bunny Storage, Hetzner S3 |
 
-## 🎯 Project Purpose
+The `granny` import name is shared with the closed `pseekoo-granny-ops`
+operations repo. Closed depends on `granny-devops` from PyPI; nothing
+flows the other direction. Anything proprietary stays out of this repo.
 
-Granny is designed to:
-- Automate AWS infrastructure deployment and management
-- Simplify static website hosting with CDN integration
-- Extract and document database schemas
-- Provide reliable disaster recovery mechanisms
-- Integrate seamlessly with CI/CD pipelines
+## Toolchain
 
-## 🏗️ Architecture Overview
+- Python **3.13+** (declared in `pyproject.toml`).
+- `uv` for everything dependency-related; never `pip install` directly into
+  the project venv.
+- `ruff` for lint + format. No black, no isort.
+- `prek` for pre-commit hooks (`prek install` once per clone).
+- `hatchling` as the build backend.
 
-### Core Components
-
-```
-┌─────────────────────────────────────────────────────────────┐
-│                     Granny Cloud Tools                      │
-├─────────────────────────┬───────────────────────────────────┤
-│   Infrastructure Tools  │        DevOps Utilities          │
-├─────────────────────────┼───────────────────────────────────┤
-│ • S3 Website Setup      │ • MongoDB Schema Extractor      │
-│ • CloudFront Manager    │ • Lambda Function Lister        │
-│ • VPC Management        │ • Airtable Exporter             │
-│ • SSL Certificate Auto  │ • Security Headers Manager      │
-└─────────────────────────┴───────────────────────────────────┘
-```
-
-### Technology Stack
-
-- **Languages**: Python 3.12+, Bash
-- **Cloud Provider**: AWS (primary), Cloudflare (DNS/SSL)
-- **Infrastructure as Code**: Terraform, CloudFormation
-- **Package Management**: uv (Python), npm (Node.js)
-- **CI/CD**: GitLab CI, GitHub Actions
-
-## 📝 Development Guidelines
-
-### Code Style and Standards
-
-#### Python Development
-
-1. **Style Guide**
-   - Follow PEP 8 conventions
-   - Use Black for code formatting
-   - Run Ruff for linting
-   - Maximum line length: 88 characters
-
-2. **Type Annotations**
-   ```python
-   def process_bucket(bucket_name: str, region: str = "us-east-1") -> Dict[str, Any]:
-       """Process S3 bucket configuration."""
-       pass
-   ```
-
-3. **Error Handling**
-   ```python
-   try:
-       response = s3_client.create_bucket(Bucket=bucket_name)
-   except ClientError as e:
-       logger.error(f"Failed to create bucket: {e}")
-       raise
-   ```
-
-4. **Documentation**
-   - Use Google-style docstrings
-   - Include usage examples
-   - Document all public APIs
-
-#### Shell Scripting
-
-1. **Script Structure**
-   ```bash
-   #!/bin/bash
-   set -euo pipefail
-   
-   # Script: list-vpcs.sh
-   # Purpose: List all VPCs across AWS regions
-   # Usage: ./list-vpcs.sh [profile-name]
-   ```
-
-2. **Error Handling**
-   ```bash
-   trap 'echo "Error on line $LINENO"' ERR
-   ```
-
-3. **Variable Naming**
-   - Use UPPERCASE for constants
-   - Use lowercase for local variables
-   - Use descriptive names
-
-#### Terraform Standards
-
-1. **Resource Naming**
-   ```hcl
-   resource "aws_s3_bucket" "granny_static_website" {
-     bucket = "${var.project_name}-${var.environment}-website"
-     # ...
-   }
-   ```
-
-2. **Module Structure**
-   ```
-   modules/
-   ├── s3-website/
-   │   ├── main.tf
-   │   ├── variables.tf
-   │   ├── outputs.tf
-   │   └── README.md
-   ```
-
-### Version Control
-
-1. **Branch Strategy**
-   - `main`: Production-ready code
-   - `develop`: Integration branch
-   - `feature/*`: New features
-   - `fix/*`: Bug fixes
-   - `docs/*`: Documentation updates
-
-2. **Commit Messages**
-   ```
-   type(scope): brief description
-   
-   Detailed explanation of changes
-   
-   Fixes #123
-   ```
-   Types: feat, fix, docs, style, refactor, test, chore
-
-3. **Pull Request Guidelines**
-   - Include tests for new features
-   - Update documentation
-   - Pass all CI checks
-   - Get at least one review
-
-## 🔒 Security Standards
-
-### Credential Management
-
-1. **Environment Variables**
-   ```bash
-   export AWS_ACCESS_KEY_ID="your-key"
-   export AWS_SECRET_ACCESS_KEY="your-secret"
-   export AWS_REGION="us-east-1"
-   ```
-
-2. **AWS Profiles**
-   ```bash
-   aws configure --profile granny-prod
-   ```
-
-3. **Secrets Management**
-   - Never commit credentials
-   - Use AWS Secrets Manager for sensitive data
-   - Rotate credentials regularly
-
-### IAM Best Practices
-
-1. **Least Privilege Principle**
-   ```json
-   {
-     "Version": "2012-10-17",
-     "Statement": [{
-       "Effect": "Allow",
-       "Action": ["s3:GetObject"],
-       "Resource": "arn:aws:s3:::granny-bucket/*"
-     }]
-   }
-   ```
-
-2. **Service-Specific Roles**
-   - Create separate roles for each service
-   - Use temporary credentials via STS
-   - Enable MFA for sensitive operations
-
-### Network Security
-
-1. **VPC Configuration**
-   - Default CIDR: 10.0.0.0/16
-   - Public subnets: 10.0.1.0/24, 10.0.2.0/24
-   - Private subnets: 10.0.11.0/24, 10.0.12.0/24
-
-2. **Security Groups**
-   - Restrictive inbound rules
-   - Specific port access only
-   - Regular audit and review
-
-## 🛠️ Tool-Specific Guidelines
-
-### S3 Website Setup Tool
-
-**Purpose**: Automate static website deployment with CDN
-
-**Usage**:
-```bash
-python tools/setup_s3_website.py example.com \
-  --cloudflare-ssl \
-  --index-document index.html \
-  --error-document error.html
+```shell
+uv sync                       # base deps
+uv sync --extra dev           # dev tooling (ruff, prek, pytest, hatch, twine)
+uv sync --extra all           # everything (cdn + data + ml + browser + extras)
 ```
 
-**Best Practices**:
-1. Always test with `--dry-run` first
-2. Use CloudFlare SSL for easier setup
-3. Enable versioning for content protection
-4. Configure appropriate cache headers
+Vault support (Locke) is wired in via `[tool.uv]` dev-dependencies, so
+`uv sync` activates `granny.credentials`'s vault path automatically. The
+published `[vault]` extra stays empty because PyPI rejects direct git URLs.
 
-### MongoDB Schema Extractor
+## Code conventions
 
-**Purpose**: Document database schemas automatically
+- Type hints on every public function. `from __future__ import annotations`
+  in modules where forward references would otherwise be awkward.
+- Imports in three blocks: stdlib → third-party → local. Ruff enforces it.
+- Business logic does **not** live in `granny.cli.*`. CLI modules accept
+  arguments, call into the corresponding library subpackage, and format
+  results. Every Click subcommand is a thin shim.
+- Provider clients accept their credentials as constructor args with env-var
+  fallback. Defer credential validation until the first network call so
+  read-only helpers (e.g. `get_nameservers`) work without secrets configured.
+  See `granny.dns.inwx.INWXDNSProvider` for the canonical pattern.
+- Errors from external APIs surface as `RuntimeError` with the upstream
+  status code and a snippet of the response body. Don't swallow exceptions.
+- `KeyError` is reserved for "object does not exist" responses (404, INWX
+  code 2302, etc.) so callers can distinguish missing from broken.
+- New comments only when the *why* is non-obvious. Don't restate what the
+  code already says.
 
-**Usage**:
-```bash
-python tools/mongodb_schema_extractor.py \
-  -u "mongodb://localhost:27017" \
-  -d mydb \
-  -o ./docs/schemas/
-```
+## Credentials
 
-**Output**:
-- JSON schemas for each collection
-- Sample data (anonymized)
-- Mermaid ER diagrams
-- Relationship documentation
+Resolution order, defined in `granny.credentials.secrets`:
 
-### CloudFront Recovery Tools
+1. Environment variable (`.env` / `.deploy.env` is auto-loaded by the CLI;
+   shell-exported values win over dotenv).
+2. Vaultwarden via Locke, if Locke is importable and a session is reachable.
+   Sessions are cached in `%LOCALAPPDATA%\granny\vault_session.json` (or
+   `~/.granny/vault_session.json` on POSIX) for one hour.
 
-**Purpose**: Recover from CloudFront distribution issues
+Never hardcode a secret. Never call `os.environ[...]` for a registered key
+— go through `get_secret(...)` so the vault path stays in play.
 
-**Common Issues**:
-1. Orphaned distributions after stack deletion
-2. Certificate validation failures
-3. Origin access identity conflicts
+To register a new secret:
 
-**Recovery Process**:
-```bash
-# 1. List problematic distributions
-./scripts/list-cloudfront-issues.sh
+1. Add `MY_NEW_KEY` to `SECRET_MAP` in
+   `granny/credentials/secrets.py` with its kebab-case vault path.
+2. Update the registered-names list in `CLAUDE.md` and the configuration
+   section of `README.md`.
+3. If the secret is multi-customer (per-account fanout), add a helper next
+   to `get_bunny_api_key` rather than re-implementing slug logic.
 
-# 2. Run recovery script
-./scripts/recover-cloudfront.sh distribution-id
+## Adding a DNS provider
 
-# 3. Verify recovery
-aws cloudfront get-distribution --id distribution-id
-```
-
-## 🧪 Testing and Quality Assurance
-
-### Testing Strategy
-
-1. **Unit Tests**
-   ```python
-   def test_bucket_creation():
-       result = create_s3_bucket("test-bucket")
-       assert result["ResponseMetadata"]["HTTPStatusCode"] == 200
+1. Implement `granny/dns/<name>.py`, subclassing
+   `granny.dns.base.DNSProvider`. Required: `get_zone_id`, `list_records`,
+   `create_record`, `delete_record`. Override `update_record` if the
+   upstream API supports atomic mutation. Override `get_nameservers`
+   instead of returning `NotImplementedError` whenever the provider's NS
+   set is documented and stable.
+2. Register the provider in `granny/dns/factory.py` (lazy factory + entry
+   in `_PROVIDERS`).
+3. Add the credential keys to `SECRET_MAP` (see above).
+4. Update `README.md` Features and the credentials list, and the registered
+   names line in `CLAUDE.md`.
+5. Smoke-test with the real CLI:
+   ```shell
+   granny dns nameservers <zone> --provider <name>
+   granny dns list <zone> --provider <name>
    ```
 
-2. **Integration Tests**
-   - Test AWS API interactions
-   - Verify resource creation
-   - Check error handling
+`granny.dns.inwx` is the most current reference implementation (JSON-RPC,
+session cookies, optional TOTP, lazy credential validation, native update).
 
-3. **End-to-End Tests**
-   - Deploy test infrastructure
-   - Validate functionality
-   - Clean up resources
+## Adding a `create` script
 
-### Quality Checks
+1. Drop the script in `granny/create/setup_<thing>.py`. It must expose a
+   module-level `main()` that parses `sys.argv` itself (argparse is fine —
+   the dispatcher rebinds `sys.argv` before invoking).
+2. Add an entry to `COMMANDS` in `granny/cli/create.py`. The key becomes
+   `granny create <key>`.
+3. If the script needs new secrets, register them as above.
+4. Verify the dispatcher loads the script: `granny create <key> --help`
+   should print the script's own argparse help.
 
-1. **Pre-commit Hooks**
-   ```yaml
-   repos:
-     - repo: https://github.com/psf/black
-       rev: 23.0.0
-       hooks:
-         - id: black
-     - repo: https://github.com/charliermarsh/ruff-pre-commit
-       rev: v0.0.261
-       hooks:
-         - id: ruff
-   ```
+## Branching, commits, release
 
-2. **CI/CD Pipeline Checks**
-   - Linting (Ruff, ShellCheck)
-   - Security scanning (Bandit, Safety)
-   - Unit test execution
-   - Coverage reporting (>80%)
+The published flow lives in `scripts/release.sh` (Bash) and
+`scripts/release.ps1` (PowerShell):
 
-## 📦 Deployment Best Practices
+1. Day-to-day work happens on `dev`. Feature/fix branches merge into `dev`.
+2. `./scripts/release.sh <patch|minor|major>` from `dev` bumps the version
+   in `pyproject.toml`, commits, fast-forwards `main`, tags `vX.Y.Z`, and
+   pushes both. CI (see below) takes over.
+3. Tagged releases publish to **pypi.org** *and* the GitLab project's PyPI
+   registry. Branch pushes publish a `0.Y.Z.devN` build to the GitLab
+   registry only.
 
-### Infrastructure Deployment
+Version bumps must match across `pyproject.toml` *and*
+`granny/__init__.py`'s `__version__`. The release scripts only update
+`pyproject.toml`; bump `__init__.py` in the same commit by hand.
 
-1. **Terraform Workflow**
-   ```bash
-   # Initialize
-   terraform init
-   
-   # Plan changes
-   terraform plan -out=tfplan
-   
-   # Apply changes
-   terraform apply tfplan
-   
-   # Destroy (careful!)
-   terraform destroy
-   ```
+Commit messages: imperative subject under 72 chars, then a blank line and
+prose explaining *why*. No conventional-commits prefix is enforced.
 
-2. **Environment Management**
-   - Use workspaces for environments
-   - Separate state files per environment
-   - Tag all resources appropriately
+## CI
 
-### Application Deployment
+`.gitlab-ci.yml` has two stages:
 
-1. **Static Website Deployment**
-   ```bash
-   # Stage 1: Create infrastructure
-   python tools/setup_s3_website.py staging.example.com
-   
-   # Stage 2: Deploy content
-   aws s3 sync ./dist s3://staging.example.com
-   
-   # Stage 3: Invalidate cache
-   aws cloudfront create-invalidation --distribution-id ABCD --paths "/*"
-   ```
+- `lint` — `ruff check .` on MRs and `dev` branch pushes.
+- `publish` — runs on default-branch pushes (dev wheel to GitLab registry)
+  and on `vX.Y.Z` tags (release wheel to GitLab registry **and** PyPI).
+  Publishing to PyPI requires `PYPI_API_TOKEN`; this is configured at the
+  GitLab group level so individual projects inherit it.
 
-2. **Rollback Strategy**
-   - Keep previous versions in S3
-   - Use CloudFront behaviors for A/B testing
-   - Implement health checks
+If a tagged release retries (the GitLab registry rejects duplicate
+versions), the script logs a warning and continues to the PyPI step rather
+than failing the pipeline.
 
-### Monitoring and Alerts
+## Tests
 
-1. **CloudWatch Metrics**
-   - S3 bucket metrics
-   - CloudFront distribution health
-   - Lambda function errors
-   - Cost anomalies
+There is no `tests/` directory yet. New tests should go there as
+`test_*.py` and run with `uv run pytest`. Until coverage exists, the
+pre-commit hook's pytest stage is effectively a no-op; that's fine — don't
+add fake tests just to populate the directory.
 
-2. **Alerting**
-   ```python
-   # Example alert configuration
-   alert_on_high_error_rate(
-       threshold=5,  # errors per minute
-       duration=300,  # 5 minutes
-       sns_topic="arn:aws:sns:us-east-1:123:alerts"
-   )
-   ```
+For provider work that touches a real account, prefer a smoke-test in your
+PR description (commands you ran, output you observed) over mocked unit
+tests. Mocks of `requests.Session` against an upstream we don't control
+tend to encode our misunderstanding of the API rather than the API itself.
 
-## 🔧 Troubleshooting Guide
+## License
 
-### Common Issues and Solutions
-
-#### S3 Website Issues
-
-| Issue | Cause | Solution |
-|-------|-------|----------|
-| 403 Forbidden | Bucket policy missing | Update bucket policy with public read |
-| DNS not resolving | CloudFlare not configured | Check CloudFlare DNS settings |
-| SSL certificate error | ACM cert not validated | Complete domain validation |
-
-#### CloudFront Issues
-
-| Issue | Cause | Solution |
-|-------|-------|----------|
-| Distribution stuck | Orphaned resources | Use recovery scripts |
-| Cache not updating | Long TTL values | Create invalidation |
-| Origin errors | S3 bucket deleted | Recreate bucket or update origin |
-
-#### Terraform Issues
-
-| Issue | Cause | Solution |
-|-------|-------|----------|
-| State lock timeout | Concurrent operations | Wait or force unlock |
-| Resource conflicts | Manual changes | Import resources to state |
-| Plan differences | Drift detection | Run refresh before plan |
-
-### Debug Commands
-
-```bash
-# Check AWS credentials
-aws sts get-caller-identity
-
-# List S3 buckets
-aws s3 ls
-
-# Get CloudFront distribution
-aws cloudfront get-distribution --id ABCD
-
-# Terraform state inspection
-terraform state list
-terraform state show aws_s3_bucket.static
-
-# CloudWatch logs
-aws logs tail /aws/lambda/function-name --follow
-```
-
-## 🤝 Contributing Guidelines
-
-### Getting Started
-
-1. **Fork the Repository**
-   ```bash
-   git clone https://github.com/yourusername/granny.git
-   cd granny
-   ```
-
-2. **Set Up Development Environment**
-   ```bash
-   # Install Python dependencies
-   uv venv
-   source .venv/bin/activate
-   uv pip install -e ".[dev]"
-   
-   # Install pre-commit hooks
-   pre-commit install
-   ```
-
-3. **Create Feature Branch**
-   ```bash
-   git checkout -b feature/amazing-feature
-   ```
-
-### Contribution Process
-
-1. **Write Code**
-   - Follow coding standards
-   - Add tests for new features
-   - Update documentation
-
-2. **Test Locally**
-   ```bash
-   # Run tests
-   pytest tests/
-   
-   # Run linting
-   ruff check .
-   
-   # Test scripts
-   ./scripts/test-all.sh
-   ```
-
-3. **Submit Pull Request**
-   - Clear description of changes
-   - Link related issues
-   - Include test results
-   - Update CHANGELOG.md
-
-### Code Review Checklist
-
-- [ ] Code follows project style guide
-- [ ] Tests pass and coverage maintained
-- [ ] Documentation updated
-- [ ] No hardcoded credentials
-- [ ] Error handling implemented
-- [ ] Performance considerations addressed
-- [ ] Security best practices followed
-
-## 📚 Additional Resources
-
-### Documentation
-- [AWS Best Practices](https://docs.aws.amazon.com/wellarchitected/)
-- [Terraform Documentation](https://www.terraform.io/docs/)
-- [Python Packaging Guide](https://packaging.python.org/)
-
-### Tools and Libraries
-- [boto3 Documentation](https://boto3.amazonaws.com/v1/documentation/api/latest/)
-- [CloudFlare API](https://api.cloudflare.com/)
-- [MongoDB Documentation](https://docs.mongodb.com/)
-
-### Community
-- Project Issues: [GitHub Issues](https://github.com/granny/issues)
-- Discussions: [GitHub Discussions](https://github.com/granny/discussions)
-- Stack Overflow: Tag with `granny-cloud-tools`
-
----
-
-## 📝 License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
-
-## 🙏 Acknowledgments
-
-- AWS for providing robust cloud services
-- CloudFlare for DNS and SSL management
-- The open-source community for invaluable tools and libraries
-
----
-
-**Last Updated**: 2025-07-14
-
-**Maintained By**: Granny Cloud Tools Team
+MIT, see [`LICENSE`](LICENSE).
