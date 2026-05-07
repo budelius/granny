@@ -30,6 +30,7 @@ COMMANDS: dict[str, str] = {
     "private-cdn": "setup_private_cdn.py",
     "s3-website": "setup_s3_website.py",
     "scaleway-faas": "setup_scaleway_faas.py",
+    "scaleway-container": "setup_scaleway_container.py",
     "workmail": "setup_workmail.py",
     "auto-certificate": "auto_certificate.py",
     "mailjet-contacts": "manage_mailjet_contacts.py",

@@ -39,6 +39,12 @@ def _cloudns() -> DNSProvider:
     return ClouDNSDNSProvider()
 
 
+def _inwx() -> DNSProvider:
+    from granny.dns.inwx import INWXDNSProvider
+
+    return INWXDNSProvider()
+
+
 def _manual() -> DNSProvider:
     from granny.dns.manual import ManualDNSProvider
 
@@ -51,6 +57,7 @@ _PROVIDERS: dict[str, Callable[[], DNSProvider]] = {
     "hetzner": _hetzner,
     "desec": _desec,
     "cloudns": _cloudns,
+    "inwx": _inwx,
     "manual": _manual,
 }
 

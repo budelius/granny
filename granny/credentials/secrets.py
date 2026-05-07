@@ -157,6 +157,11 @@ SECRET_MAP: dict[str, str] = {
     "CLOUDNS_AUTH_PASSWORD": "cloudns-auth-password",
     "CLOUDNS_SUB_AUTH_ID": "cloudns-sub-auth-id",
     "CLOUDNS_SUB_AUTH_USER": "cloudns-sub-auth-user",
+    # INWX (api.domrobot.com). INWX_SHARED_SECRET is the TOTP base32 secret;
+    # only required when 2FA is enabled on the account.
+    "INWX_USERNAME": "inwx-username",
+    "INWX_PASSWORD": "inwx-password",
+    "INWX_SHARED_SECRET": "inwx-shared-secret",
     # Container registries
     "DOCKER_HUB_USER": "docker-hub-user",
     "DOCKER_HUB_TOKEN": "docker-hub-token",
