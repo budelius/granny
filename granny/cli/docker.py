@@ -120,8 +120,10 @@ def build_base(
         missing = [k for k, ok in results.items() if not ok]
         if missing:
             click.echo(
-                f"Missing secrets (not in env): {', '.join(sorted(missing))}\n"
-                f"Set them in .env / .deploy.env or export them in your shell.",
+                f"Missing secrets (not in env or vault): {', '.join(sorted(missing))}\n"
+                f"Set them in .env / .deploy.env, export them in your shell, "
+                f"or — with the [vault] extra installed — import via "
+                f"`locke vault import kv --folder granny/infra --from-file .locke/vault-import.json`.",
                 err=True,
             )
             sys.exit(1)

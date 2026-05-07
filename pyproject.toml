@@ -1,6 +1,6 @@
 [project]
 name = "granny-devops"
-version = "0.4.0"
+version = "0.5.0"
 description = "Cloud tools collection -- AWS infrastructure, CDN, and DevOps automation"
 readme = "README.md"
 license = { file = "LICENSE" }
@@ -22,9 +22,10 @@ dev = [
     "ruff>=0.11",
     "twine>=6.1",
 ]
-# Vaultwarden-backed credential resolution via Locke is intentionally not
-# declared here because PyPI rejects direct Git dependencies. Install Locke
-# separately from its repository when vault-backed local secrets are needed.
+# Vaultwarden-backed credential resolution via Locke. The published wheel
+# leaves this extra empty because PyPI rejects direct Git dependencies; for
+# local editable installs Locke is wired in via `[tool.uv]` dev-dependencies
+# below, so `uv sync` activates vault support automatically.
 vault = []
 # CDN and DNS providers
 cdn = [
@@ -100,3 +101,11 @@ packages = ["granny"]
 
 [tool.hatch.build.targets.sdist]
 include = ["granny"]
+
+# uv-only configuration. PyPI publishes ignore this section -- it activates
+# vault support (Locke) for local editable installs via `uv sync`, without
+# polluting the published wheel's metadata with a Git URL that PyPI rejects.
+[tool.uv]
+dev-dependencies = [
+    "locke @ git+https://gitlab.com/martin-wieser/locke.git#subdirectory=python",
+]

@@ -80,8 +80,38 @@ def parse_spf(spf_record: str) -> tuple[list[str], str]:
     """Parse an SPF record into (mechanisms, qualifier).
 
     Returns e.g. (["include:_spf.google.com", "include:spf.mailjet.com"], "~all").
+
+    Some DNS providers (notably Cloudflare) return TXT record content with
+    surrounding quotes (``"v=spf1 ..."``) and split long records into
+    multiple quoted strings (``"v=spf1 ..." "include:other.com -all"``).
+    Strip those before tokenizing so callers can pass raw provider values.
     """
-    parts = spf_record.strip().split()
+    raw = spf_record.strip()
+    # Concatenate adjacent quoted strings (RFC 1035 multi-string TXT)
+    # and unwrap any single wrapping pair: `"foo" "bar"` -> `foo bar`,
+    # `"foo"` -> `foo`. Naive unquote -- SPF values don't contain literal
+    # backslash-escaped quotes in practice.
+    if '"' in raw:
+        chunks: list[str] = []
+        in_quote = False
+        buf: list[str] = []
+        for ch in raw:
+            if ch == '"':
+                in_quote = not in_quote
+                continue
+            if in_quote:
+                buf.append(ch)
+            elif ch.isspace() and buf:
+                chunks.append("".join(buf))
+                buf = []
+        if buf:
+            chunks.append("".join(buf))
+        if chunks:
+            # SPF tokens are whitespace-separated; rejoin with a space so a
+            # multi-string TXT split between tokens reconstructs cleanly.
+            raw = " ".join(chunks)
+
+    parts = raw.split()
     mechanisms: list[str] = []
     qualifier = "~all"
     for part in parts:

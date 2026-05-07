@@ -71,6 +71,11 @@ def _register_commands() -> None:
     except ImportError:
         pass
     try:
+        from granny.cli.cloudflare import cloudflare
+        cli.add_command(cloudflare)
+    except ImportError:
+        pass
+    try:
         from granny.cli.storage import storage
         cli.add_command(storage)
     except ImportError:

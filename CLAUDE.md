@@ -5,11 +5,12 @@ Cloud tools collection for AWS/CDN/DNS automation. Python 3.13+, `uv` for deps.
 ## Layout
 
 ```
-granny/          # Installable package (CLI entrypoint: `granny`)
-  cli/           # Click command groups: analyze, cdn, create, credentials
+granny/          # Installable package `granny-devops` (CLI entrypoint: `granny`)
+  cli/           # Click command groups: analyze, cdn, cloudflare, create, credentials, dns, docker, edge, email, serverless, storage
   analyze/       # AWS resource listing (vpcs, lambdas)
-  credentials/   # Env-var secret resolution
-tools/create/    # Standalone setup scripts (S3/CloudFront, Bunny, Scaleway, ...)
+  cloudflare/    # Workers / D1 / R2 / KV resource clients
+  credentials/   # Vault (Locke) + env-var secret resolution
+  create/        # Cloud setup scripts (S3/CloudFront, Bunny, Scaleway, ...)
 tests/
 ```
 
@@ -22,7 +23,7 @@ tests/
 
 ## Credentials
 
-Env-var only. `.env` / `.deploy.env` is auto-loaded by the CLI.
+Env-var first; vault (Locke / Vaultwarden) as optional fallback. `.env` / `.deploy.env` is auto-loaded by the CLI; vault support activates automatically when `locke` is importable (declared as a dev dep, so `uv sync` wires it up locally).
 
 ```python
 from granny.credentials import get_secret, get_bunny_api_key
