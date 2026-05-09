@@ -122,9 +122,13 @@ granny credentials get <NAME>
 
 **A registered secret:**
 1. Add to `SECRET_MAP` in `granny/credentials/secrets.py` with kebab-case
-   vault path.
+   vault path. The vault is the primary store -- secrets live in
+   Vaultwarden and resolve through Locke at runtime.
 2. Update the registered-keys list above and in `README.md`.
-3. Add an entry to `.env.example` under the appropriate provider block.
+3. Do **not** automatically add the new key to `.env.example`. That file
+   is reserved for secrets that genuinely benefit from a per-checkout
+   override (short-lived tokens, dev rotations). Registry / CI / 2FA-style
+   credentials live in the vault and stay out of `.env.example`.
 
 ## Release
 
