@@ -17,9 +17,11 @@ def __getattr__(name: str):
     if name in {
         "GpuInstance",
         "GpuReservation",
+        "CapacityBlockOffering",
         "aws_profiles",
         "list_aws_gpu_instances",
         "list_aws_gpu_reservations",
+        "list_aws_capacity_block_offerings",
         "gcp_projects",
         "list_gcp_gpu_instances",
         "list_gcp_gpu_reservations",

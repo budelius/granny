@@ -16,7 +16,7 @@ from __future__ import annotations
 import logging
 import re
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 logger = logging.getLogger(__name__)
 
@@ -146,6 +146,24 @@ class GpuReservation:
     start_time: str | None
     end_time: str | None
     commitment_term: str | None
+
+
+@dataclass
+class CapacityBlockOffering:
+    """An available EC2 Capacity Block for ML offering (not yet purchased)."""
+
+    account: str
+    region: str
+    zone: str
+    offering_id: str
+    instance_type: str
+    instance_count: int
+    duration_hours: int
+    start_time: str
+    end_time: str
+    upfront_fee: float
+    currency: str
+    tenancy: str
 
 
 # ---------------------------------------------------------------------------
@@ -313,6 +331,97 @@ def list_aws_gpu_reservations(
             except (BotoCoreError, ClientError) as e:
                 logger.warning("AWS %s/%s reserved instances: %s", profile, region, e)
     return results
+
+
+# Regions where Capacity Blocks for ML are generally available.
+# describe-capacity-block-offerings only works here; other regions return
+# UnsupportedOperation. Update as AWS rolls out to new regions.
+_AWS_CAPACITY_BLOCK_REGIONS: tuple[str, ...] = (
+    "us-east-1",
+    "us-east-2",
+    "us-west-2",
+    "eu-west-1",
+    "eu-west-2",
+    "eu-north-1",
+    "eu-central-1",
+    "ap-northeast-1",
+    "ap-southeast-2",
+)
+
+
+def list_aws_capacity_block_offerings(
+    instance_type: str,
+    instance_count: int = 1,
+    duration_hours: int = 24,
+    start_window_days: int = 30,
+    profiles: list[str] | None = None,
+    regions: list[str] | None = None,
+) -> list[CapacityBlockOffering]:
+    """Find available EC2 Capacity Block offerings for ML GPU instances.
+
+    Args:
+        instance_type: GPU instance type, e.g. ``p5.48xlarge`` or ``p5e.48xlarge``.
+        instance_count: How many instances the block must hold.
+        duration_hours: Block length in hours (AWS supports 1, 6, 12, 24, 48,
+            72, 168, 336, 504, 672 ... — pass what you need).
+        start_window_days: Search for blocks starting between now and this many
+            days out.
+        profiles: AWS profiles to query (default: all configured profiles).
+        regions: Regions to query (default: the known Capacity-Block-enabled
+            regions; pass an explicit list to override).
+
+    Returns:
+        Offerings sorted cheapest-first.
+    """
+    import boto3
+    from botocore.exceptions import BotoCoreError, ClientError
+
+    profiles = profiles or aws_profiles()
+    regions = regions or list(_AWS_CAPACITY_BLOCK_REGIONS)
+    now = datetime.now(timezone.utc)
+    end = now + timedelta(days=start_window_days)
+
+    out: list[CapacityBlockOffering] = []
+    for profile in profiles:
+        for region in regions:
+            try:
+                session = boto3.Session(profile_name=profile if profile != "default" else None)
+                ec2 = session.client("ec2", region_name=region)
+                paginator = ec2.get_paginator("describe_capacity_block_offerings")
+                for page in paginator.paginate(
+                    InstanceType=instance_type,
+                    InstanceCount=instance_count,
+                    CapacityDurationHours=duration_hours,
+                    StartDateRange=now,
+                    EndDateRange=end,
+                ):
+                    for o in page.get("CapacityBlockOfferings", []):
+                        try:
+                            fee = float(o.get("UpfrontFee", 0) or 0)
+                        except (TypeError, ValueError):
+                            fee = 0.0
+                        out.append(
+                            CapacityBlockOffering(
+                                account=profile,
+                                region=region,
+                                zone=o.get("AvailabilityZone", ""),
+                                offering_id=o.get("CapacityBlockOfferingId", ""),
+                                instance_type=o.get("InstanceType", instance_type),
+                                instance_count=o.get("InstanceCount", instance_count),
+                                duration_hours=o.get(
+                                    "CapacityBlockDurationHours", duration_hours
+                                ),
+                                start_time=_iso(o.get("StartDate")) or "",
+                                end_time=_iso(o.get("EndDate")) or "",
+                                upfront_fee=fee,
+                                currency=o.get("CurrencyCode", "USD"),
+                                tenancy=o.get("Tenancy", "default"),
+                            )
+                        )
+            except (BotoCoreError, ClientError) as e:
+                logger.debug("AWS %s/%s capacity-block offerings: %s", profile, region, e)
+    out.sort(key=lambda o: (o.upfront_fee, o.start_time))
+    return out
 
 
 # ---------------------------------------------------------------------------

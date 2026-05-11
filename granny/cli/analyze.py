@@ -125,13 +125,16 @@ def gpus(
 
     instances: list = []
     reservations: list = []
+    scanned: dict[str, list[str]] = {}
 
     for p in targets:
         try:
             if p == "aws":
+                aws_targets = list(profiles) or g.aws_profiles()
+                scanned["aws"] = aws_targets
                 instances.extend(
                     g.list_aws_gpu_instances(
-                        profiles=list(profiles) or None,
+                        profiles=aws_targets,
                         regions=list(regions) or None,
                         include_stopped=include_stopped,
                     )
@@ -139,33 +142,35 @@ def gpus(
                 if include_reserved:
                     reservations.extend(
                         g.list_aws_gpu_reservations(
-                            profiles=list(profiles) or None,
+                            profiles=aws_targets,
                             regions=list(regions) or None,
                         )
                     )
             elif p == "gcp":
+                gcp_targets = list(projects) or g.gcp_projects()
+                scanned["gcp"] = gcp_targets
                 instances.extend(
                     g.list_gcp_gpu_instances(
-                        projects=list(projects) or None,
+                        projects=gcp_targets,
                         include_stopped=include_stopped,
                     )
                 )
                 if include_reserved:
                     reservations.extend(
-                        g.list_gcp_gpu_reservations(projects=list(projects) or None)
+                        g.list_gcp_gpu_reservations(projects=gcp_targets)
                     )
             elif p == "azure":
+                az_targets = list(subscriptions) or [sid for sid, _ in g.azure_subscriptions()]
+                scanned["azure"] = az_targets
                 instances.extend(
                     g.list_azure_gpu_instances(
-                        subscriptions=list(subscriptions) or None,
+                        subscriptions=az_targets,
                         include_stopped=include_stopped,
                     )
                 )
                 if include_reserved:
                     reservations.extend(
-                        g.list_azure_gpu_reservations(
-                            subscriptions=list(subscriptions) or None
-                        )
+                        g.list_azure_gpu_reservations(subscriptions=az_targets)
                     )
         except RuntimeError as e:
             click.echo(f"[{p}] skipped: {e}", err=True)
@@ -178,6 +183,7 @@ def gpus(
         click.echo(
             json.dumps(
                 {
+                    "scanned": scanned,
                     "instances": [asdict(i) for i in instances],
                     "reservations": [asdict(r) for r in reservations],
                 },
@@ -186,6 +192,13 @@ def gpus(
             )
         )
         return
+
+    scope_labels = {"aws": "AWS profiles", "gcp": "GCP projects", "azure": "Azure subscriptions"}
+    for p in targets:
+        items = scanned.get(p)
+        if items is None:
+            continue
+        click.echo(f"Scanned {scope_labels[p]}: {', '.join(items) if items else '(none)'}")
 
     if not instances and not reservations:
         click.echo("No GPU resources found.")
@@ -225,6 +238,96 @@ def gpus(
                 f"{r.instance_type[:27]:<28} {r.gpu_model:<7} "
                 f"{r.instance_count:>5} {r.state[:9]:<10} {r.commitment_term or ''}"
             )
+
+
+@analyze.command("capacity-blocks")
+@click.option(
+    "--instance-type",
+    "instance_type",
+    required=True,
+    help="GPU instance type, e.g. p5.48xlarge, p5e.48xlarge, p5en.48xlarge, p4d.24xlarge",
+)
+@click.option("--count", "instance_count", default=1, show_default=True, help="Instances per block")
+@click.option(
+    "--hours",
+    "duration_hours",
+    default=24,
+    show_default=True,
+    help="Block duration in hours (1, 6, 12, 24, 48, 72, 168, 336, 504, 672, ...)",
+)
+@click.option(
+    "--start-window-days",
+    default=30,
+    show_default=True,
+    help="Search for blocks starting within this many days from now",
+)
+@click.option("--profile", "profiles", multiple=True, help="AWS profile (repeatable; default: all)")
+@click.option(
+    "--region",
+    "regions",
+    multiple=True,
+    help="AWS region (repeatable; default: known Capacity-Block regions)",
+)
+@click.option("--json-output", "as_json", is_flag=True, help="Output as JSON")
+def capacity_blocks(
+    instance_type: str,
+    instance_count: int,
+    duration_hours: int,
+    start_window_days: int,
+    profiles: tuple[str, ...],
+    regions: tuple[str, ...],
+    as_json: bool,
+) -> None:
+    """Find available AWS Capacity Blocks for ML (H100/H200/A100 reservations).
+
+    Scans regions where Capacity Blocks are sold and returns open offerings
+    sorted cheapest-first. Use the offering ID with the AWS CLI to purchase:
+
+      aws ec2 purchase-capacity-block --capacity-block-offering-id <id>
+          --instance-platform Linux/UNIX
+    """
+    from dataclasses import asdict
+
+    from granny.analyze.gpus import list_aws_capacity_block_offerings
+
+    offerings = list_aws_capacity_block_offerings(
+        instance_type=instance_type,
+        instance_count=instance_count,
+        duration_hours=duration_hours,
+        start_window_days=start_window_days,
+        profiles=list(profiles) or None,
+        regions=list(regions) or None,
+    )
+
+    if as_json:
+        click.echo(json.dumps([asdict(o) for o in offerings], indent=2, default=str))
+        return
+
+    if not offerings:
+        click.echo(
+            f"No Capacity Block offerings found for {instance_type} x{instance_count} "
+            f"({duration_hours}h) in the next {start_window_days} days.\n"
+            "Try: a longer --start-window-days, fewer instances, a different "
+            "duration, or another --instance-type."
+        )
+        return
+
+    click.echo(
+        f"\n{'Profile':<14} {'Region':<14} {'AZ':<16} {'Type':<16} "
+        f"{'#':>3} {'Hrs':>4} {'Start (UTC)':<22} {'Upfront':>12} {'Cur':<4} {'Offering ID'}"
+    )
+    click.echo("-" * 140)
+    for o in offerings:
+        click.echo(
+            f"{o.account[:13]:<14} {o.region:<14} {o.zone:<16} "
+            f"{o.instance_type:<16} {o.instance_count:>3} {o.duration_hours:>4} "
+            f"{o.start_time[:19]:<22} {o.upfront_fee:>12,.2f} {o.currency:<4} "
+            f"{o.offering_id}"
+        )
+    click.echo(
+        "\nPurchase with:  aws ec2 purchase-capacity-block "
+        "--capacity-block-offering-id <id> --instance-platform Linux/UNIX"
+    )
 
 
 @analyze.command()

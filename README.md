@@ -131,6 +131,10 @@ granny analyze gpus --provider aws --profile prod --profile dev
 granny analyze credits                             # available balances
 granny analyze costs                               # MTD + month-end forecast
 
+# AWS Capacity Blocks for ML -- discover available H100/H200/A100 blocks
+granny analyze capacity-blocks --instance-type p5.48xlarge --hours 24
+granny analyze capacity-blocks --instance-type p5e.48xlarge --count 2 --hours 168
+
 # Cloudflare account resources (Workers, D1, R2, KV)
 granny cloudflare d1 create my-app
 granny cloudflare r2 create my-app-media
