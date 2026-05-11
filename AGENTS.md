@@ -21,7 +21,7 @@ stays out of this repo.
 ```
 granny/
   cli/           Click command groups -- thin shims, no business logic
-  analyze/       Read-only AWS inventory (vpcs, lambdas)
+  analyze/       Cross-cloud inventory (vpcs, lambdas, gpus, credits, costs)
   cdn/           Bunny CDN (pull zones, edge rules, SSL, cache)
   cloudflare/    Cloudflare Workers / D1 / R2 / KV (account-level)
   create/        Standalone setup scripts dispatched via `granny create <name>`

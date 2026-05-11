@@ -45,6 +45,14 @@ pip install granny-devops
 uv add granny-devops
 ```
 
+Optional extras enable additional providers:
+
+```shell
+pip install "granny-devops[gcp]"     # GCP for granny analyze (gpus|credits|costs)
+pip install "granny-devops[azure]"   # Azure for granny analyze (gpus|credits|costs)
+pip install "granny-devops[cdn]"     # Cloudflare, Hetzner DNS
+```
+
 Tagged releases land on **pypi.org** and the public GitLab PyPI registry
 in parallel. If PyPI is propagating slowly, fall back to the registry:
 
@@ -115,6 +123,14 @@ granny storage aws create my-website --website
 granny analyze vpcs --json-output
 granny analyze lambdas --region us-east-1 eu-west-1
 
+# Cross-cloud GPU / credit / cost inventory (AWS + GCP + Azure)
+granny analyze gpus                                # running GPUs everywhere
+granny analyze gpus --filter h100,h200             # find Hopper clusters
+granny analyze gpus --include-reserved             # also capacity blocks / RIs
+granny analyze gpus --provider aws --profile prod --profile dev
+granny analyze credits                             # available balances
+granny analyze costs                               # MTD + month-end forecast
+
 # Cloudflare account resources (Workers, D1, R2, KV)
 granny cloudflare d1 create my-app
 granny cloudflare r2 create my-app-media
@@ -148,6 +164,7 @@ granny create mailjet-dns example.com
 | Workers / KV / D1 / R2 | Cloudflare |
 | Email send infra | Mailjet, AWS SES, AWS WorkMail |
 | AWS inventory | VPCs, Lambdas |
+| Cross-cloud inventory | GPU instances + reservations, credit balances, MTD spend + forecast (AWS, GCP, Azure) |
 | SSL automation | Bunny, Cloudflare, ACM |
 
 ## As a library
@@ -177,7 +194,7 @@ load_secrets_into_env()
 ```
 granny/
   cli/           Click command groups (granny <group> <verb>)
-  analyze/      AWS inventory
+  analyze/      Cross-cloud inventory (AWS, GCP, Azure)
   cdn/          Bunny CDN
   cloudflare/   Cloudflare Workers / D1 / R2 / KV
   create/       Standalone setup scripts (granny create <name>)
