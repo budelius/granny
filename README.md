@@ -154,6 +154,13 @@ granny email workmail create-user example.com --email user@example.com
 granny create s3-website example.com --help
 granny create scaleway-container --name my-app --port 3000
 granny create mailjet-dns example.com
+
+# Authentik admin (provider + application + group plumbing)
+granny authentik provision-stoz3n-dash development     # idempotent per-stage setup
+granny authentik list providers
+granny authentik rotate-secret stoz3n-dash-staging
+granny authentik add-user-to-group martin              # defaults to dash_admins
+granny authentik api GET /api/v3/core/users/me/        # generic escape hatch
 ```
 
 ## Capability matrix
@@ -170,6 +177,7 @@ granny create mailjet-dns example.com
 | AWS inventory | VPCs, Lambdas |
 | Cross-cloud inventory | GPU instances + reservations, credit balances, MTD spend + forecast (AWS, GCP, Azure) |
 | SSL automation | Bunny, Cloudflare, ACM |
+| SSO / IdP | Authentik (provider + application + group provisioning, per-stage stoz3n-dash workflow) |
 
 ## As a library
 

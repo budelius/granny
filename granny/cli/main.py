@@ -95,6 +95,11 @@ def _register_commands() -> None:
         cli.add_command(email)
     except ImportError:
         pass
+    try:
+        from granny.cli.authentik import authentik
+        cli.add_command(authentik)
+    except ImportError:
+        pass
 
 
 _register_commands()

@@ -22,6 +22,8 @@ stays out of this repo.
 granny/
   cli/           Click command groups -- thin shims, no business logic
   analyze/       Cross-cloud inventory (vpcs, lambdas, gpus, credits, costs)
+  authentik/     Authentik (auth.pseekoo.io) admin: provider + application +
+                 group provisioning, per-stage stoz3n-dash workflow
   cdn/           Bunny CDN (pull zones, edge rules, SSL, cache)
   cloudflare/    Cloudflare Workers / D1 / R2 / KV (account-level)
   create/        Standalone setup scripts dispatched via `granny create <name>`
@@ -83,7 +85,9 @@ Registered keys (`SECRET_MAP` in `granny/credentials/secrets.py`):
 `CLOUDNS_AUTH_ID`/`_PASSWORD`, `CLOUDNS_SUB_AUTH_ID`/`_USER`,
 `INWX_USERNAME`/`_PASSWORD`/`_SHARED_SECRET` (last only with 2FA),
 `DOCKER_HUB_USER`/`_TOKEN`,
-`GITLAB_PYPI_USER`/`_PASSWORD`.
+`GITLAB_PYPI_USER`/`_PASSWORD`,
+`AUTHENTIK_API_TOKEN` (vault path `granny/infra/authentik-api-token`;
+`granny.authentik` also accepts `AK_TOKEN` as an env-only alias).
 
 Inspect what's set:
 

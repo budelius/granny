@@ -168,6 +168,10 @@ SECRET_MAP: dict[str, str] = {
     # GitLab PyPI / Container Registry (for fetching private packages and pushing images)
     "GITLAB_PYPI_USER": "gitlab-pypi-user",
     "GITLAB_PYPI_PASSWORD": "gitlab-pypi-password",
+    # Authentik admin API token for `granny authentik …` commands. Long-lived
+    # superuser-issued token (Authentik UI → Directory → Tokens). Falls back
+    # to AK_TOKEN env var in granny.authentik.AuthentikClient.from_environment.
+    "AUTHENTIK_API_TOKEN": "authentik-api-token",
 }
 
 # Module-level cache so vault is only contacted once per process
