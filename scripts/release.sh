@@ -49,8 +49,17 @@ TAG="v${NEW_VERSION}"
 
 echo "Bumping $CURRENT -> $NEW_VERSION"
 
-# Bump version in pyproject.toml
-sed -i "s/^version = \".*\"/version = \"${NEW_VERSION}\"/" pyproject.toml
+# Bump version in pyproject.toml. BSD sed (macOS) and GNU sed (Linux) treat
+# `-i` differently: BSD needs an explicit backup-suffix argument, GNU does
+# not. Using a temp-file rewrite sidesteps that.
+python3 - "$NEW_VERSION" <<'PY'
+import re, sys, pathlib
+v = sys.argv[1]
+p = pathlib.Path("pyproject.toml")
+p.write_text(
+    re.sub(r'^version\s*=\s*".*"', f'version = "{v}"', p.read_text(), count=1, flags=re.M)
+)
+PY
 git add pyproject.toml
 git commit -m "Bump version to ${NEW_VERSION}"
 
