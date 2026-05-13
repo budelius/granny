@@ -135,8 +135,22 @@ def provision_stoz3n_dash(
     created_group = existing_group is None
     group = existing_group or client.ensure_group(ADMIN_GROUP_NAME)
 
-    # 3. Provider
-    existing_provider = client.find_provider_by_name(provider_name)
+    # 3. Provider — three reconciliation paths:
+    #   a. App+provider already exist under our slug → adopt them. We honor
+    #      the existing provider's pk so its client_id stays stable; only
+    #      rename + reconfigure fields. This is the production path where
+    #      a pre-existing app may already be live with consumers.
+    #   b. Provider exists by name (our convention) but no app → PATCH it
+    #      in place.
+    #   c. Nothing exists → POST a fresh provider.
+    existing_app_for_adoption = client.find_application_by_slug(app_slug)
+    adopt_pk: int | str | None = None
+    if existing_app_for_adoption is not None:
+        adopt_pk = existing_app_for_adoption.get("provider")
+    existing_provider = (
+        client.find_provider_by_pk(adopt_pk) if adopt_pk is not None else None
+    ) or client.find_provider_by_name(provider_name)
+
     provider_body: dict[str, object] = {
         "name": provider_name,
         "authorization_flow": authorization_flow,
@@ -164,7 +178,6 @@ def provision_stoz3n_dash(
         created_provider = True
 
     # 4. Application
-    existing_app = client.find_application_by_slug(app_slug)
     app_body = {
         "name": cfg["name"],
         "slug": app_slug,
@@ -172,15 +185,16 @@ def provision_stoz3n_dash(
         "meta_launch_url": cfg["launch_url"],
         "policy_engine_mode": "any",
     }
-    if existing_app:
+    if existing_app_for_adoption:
         client.request("PATCH", f"/api/v3/core/applications/{app_slug}/", body=app_body)
         created_application = False
+        target_pk = existing_app_for_adoption["pk"]
     else:
-        client.request("POST", "/api/v3/core/applications/", body=app_body)
+        new_app = client.request("POST", "/api/v3/core/applications/", body=app_body)
         created_application = True
+        target_pk = new_app["pk"]
 
     # 5. Group → application policy binding
-    target_pk = existing_app["pk"] if existing_app else client.find_application_by_slug(app_slug)["pk"]  # type: ignore[index]
     bindings = client.request(
         "GET", "/api/v3/policies/bindings/", params={"target": target_pk}
     ).get("results", [])

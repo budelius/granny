@@ -47,14 +47,15 @@ class AuthentikClient:
     def from_environment(cls) -> "AuthentikClient":
         """Build a client from env vars + Vaultwarden fallback.
 
-        Resolution order for the token:
+        Resolution order for the token (explicit env always wins so a
+        rotated value in ``.env`` is picked up immediately without having
+        to invalidate the vault session cache):
 
-        1. ``AUTHENTIK_API_TOKEN`` (env / .env / .deploy.env)
-        2. ``AK_TOKEN`` (env / .env) — alias used by the standalone
-           ``pseekoo-1-setup/authentik/authentik-api.py`` script
-        3. Vaultwarden via Locke at ``granny/infra/authentik-api-token``
-           (only registered for AUTHENTIK_API_TOKEN; AK_TOKEN does not
-           round-trip through vault)
+        1. ``AK_TOKEN`` (env / .env / .deploy.env) — short alias matching
+           the standalone Authentik scripts.
+        2. ``AUTHENTIK_API_TOKEN`` (env / .env / .deploy.env or
+           Vaultwarden at ``granny/infra/authentik-api-token``, via the
+           normal :func:`granny.credentials.get_secret` chain).
 
         For the base URL, ``AUTHENTIK_URL`` wins; default
         ``https://auth.pseekoo.io``.
@@ -63,7 +64,7 @@ class AuthentikClient:
 
         from granny.credentials import get_secret
 
-        token = get_secret("AUTHENTIK_API_TOKEN") or os.environ.get("AK_TOKEN")
+        token = os.environ.get("AK_TOKEN") or get_secret("AUTHENTIK_API_TOKEN")
         if not token:
             raise AuthentikError(
                 0,
@@ -180,12 +181,28 @@ class AuthentikClient:
         return None
 
     def find_application_by_slug(self, slug: str) -> dict[str, Any] | None:
-        for a in self.request("GET", "/api/v3/core/applications/", params={"slug": slug}).get(
-            "results", []
-        ):
-            if a["slug"] == slug:
-                return a
-        return None
+        """Look up an application by slug.
+
+        Uses a direct GET on the slug-keyed detail endpoint instead of the
+        list endpoint. Authentik's application list quietly hides records
+        whose policy bindings restrict ``view`` permissions, even for
+        superusers — direct GET by slug bypasses that filter.
+        """
+        try:
+            return self.request("GET", f"/api/v3/core/applications/{slug}/")
+        except AuthentikError as exc:
+            if exc.status == 404:
+                return None
+            raise
+
+    def find_provider_by_pk(self, pk: int | str) -> dict[str, Any] | None:
+        """Look up an OAuth2 provider by primary key (integer)."""
+        try:
+            return self.request("GET", f"/api/v3/providers/oauth2/{pk}/")
+        except AuthentikError as exc:
+            if exc.status == 404:
+                return None
+            raise
 
     # ── Mutating helpers ─────────────────────────────────────────────────
 
