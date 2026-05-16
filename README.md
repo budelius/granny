@@ -156,6 +156,11 @@ granny create scaleway-container --name my-app --port 3000
 granny create mailjet-dns example.com
 
 # Authentik admin (provider + application + group plumbing)
+granny authentik provision-oauth-app my-app \
+  --name "My App" \
+  --redirect-uri https://app.example.com/auth/callback \
+  --launch-url https://app.example.com \
+  --group my-app-admins
 granny authentik list providers
 granny authentik rotate-secret my-oauth-provider
 granny authentik add-user-to-group user@example.com     # defaults to dash_admins

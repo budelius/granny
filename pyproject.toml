@@ -1,6 +1,6 @@
 [project]
 name = "granny-devops"
-version = "0.9.1"
+version = "0.9.2"
 description = "Cloud tools collection -- AWS infrastructure, CDN, and DevOps automation"
 readme = "README.md"
 license = { file = "LICENSE" }

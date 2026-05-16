@@ -12,7 +12,7 @@ from typing import Any
 
 import click
 
-from granny.authentik import AuthentikClient, AuthentikError
+from granny.authentik import AuthentikClient, AuthentikError, OAuthAppSpec, provision_oauth_app
 
 ADMIN_GROUP_NAME = "dash_admins"
 
@@ -28,6 +28,110 @@ def _client() -> AuthentikClient:
     except AuthentikError as exc:
         click.echo(str(exc), err=True)
         sys.exit(1)
+
+
+def _print_provision_report(result: Any) -> None:
+    click.echo("", err=True)
+    click.echo("─" * 72)
+    click.echo(f"Authentik URL      : {result.base_url}")
+    click.echo(f"Application slug   : {result.application_slug}")
+    click.echo(f"Issuer             : {result.issuer}")
+    click.echo(f"client_id          : {result.client_id}")
+    click.echo(
+        f"client_secret      : {result.client_secret or '(not echoed — rotate-secret to see)'}"
+    )
+    click.echo(f"redirect_uris      : {', '.join(result.redirect_uris)}")
+    click.echo(f"group              : {result.group or '(none)'}")
+    click.echo(f"scopes             : {result.scopes}")
+    flags = [
+        f"provider={'NEW' if result.created_provider else 'EXISTS'}",
+        f"application={'NEW' if result.created_application else 'EXISTS'}",
+        f"binding={'NEW' if result.created_binding else 'EXISTS'}",
+        f"group={'NEW' if result.created_group else 'EXISTS'}",
+    ]
+    click.echo(f"state              : {', '.join(flags)}")
+    click.echo("─" * 72)
+    click.echo("")
+    click.echo(json.dumps({"oidc": result.oidc_block()}, indent=2))
+    if not result.client_secret:
+        click.echo("", err=True)
+        click.echo(
+            "WARN: Authentik did not echo client_secret in the response. "
+            "Run `granny authentik rotate-secret " + result.application_slug
+            + "` to mint a fresh secret you can copy.",
+            err=True,
+        )
+
+
+@authentik.command("provision-oauth-app")
+@click.argument("slug")
+@click.option("--name", required=True, help="Application display name.")
+@click.option(
+    "--redirect-uri",
+    "redirect_uris",
+    multiple=True,
+    required=True,
+    help="Allowed redirect URI. Repeat for multiple callbacks.",
+)
+@click.option("--launch-url", default=None, help="Optional application launch URL.")
+@click.option("--group", default=None, help="Optional group allowed to access the app.")
+@click.option("--provider-name", default=None, help="OAuth2 provider name (defaults to slug).")
+@click.option(
+    "--scope",
+    "scopes",
+    multiple=True,
+    default=("openid", "profile", "email"),
+    show_default=True,
+    help="OIDC scope to include. Repeat to override/add scopes.",
+)
+@click.option(
+    "--authorization-flow",
+    default="default-provider-authorization-explicit-consent",
+    show_default=True,
+    help="Authorization flow slug.",
+)
+@click.option(
+    "--invalidation-flow",
+    default="default-provider-invalidation-flow",
+    show_default=True,
+    help="Invalidation flow slug.",
+)
+@click.option(
+    "--rotate",
+    is_flag=True,
+    help="Force a fresh client_secret if the provider already exists.",
+)
+def provision_oauth_app_cmd(
+    slug: str,
+    name: str,
+    redirect_uris: tuple[str, ...],
+    launch_url: str | None,
+    group: str | None,
+    provider_name: str | None,
+    scopes: tuple[str, ...],
+    authorization_flow: str,
+    invalidation_flow: str,
+    rotate: bool,
+) -> None:
+    """Provision an OAuth2 provider + application + optional group binding."""
+    spec = OAuthAppSpec(
+        slug=slug,
+        name=name,
+        redirect_uris=redirect_uris,
+        launch_url=launch_url,
+        group=group,
+        provider_name=provider_name,
+        scopes=scopes,
+        authorization_flow_slug=authorization_flow,
+        invalidation_flow_slug=invalidation_flow,
+    )
+    client = _client()
+    try:
+        result = provision_oauth_app(client, spec, rotate_secret=rotate)
+    except AuthentikError as exc:
+        click.echo(f"Authentik error: {exc}", err=True)
+        sys.exit(1)
+    _print_provision_report(result)
 
 
 _LIST_ENDPOINTS = {
