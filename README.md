@@ -156,10 +156,9 @@ granny create scaleway-container --name my-app --port 3000
 granny create mailjet-dns example.com
 
 # Authentik admin (provider + application + group plumbing)
-granny authentik provision-stoz3n-dash development     # idempotent per-stage setup
 granny authentik list providers
-granny authentik rotate-secret stoz3n-dash-staging
-granny authentik add-user-to-group martin              # defaults to dash_admins
+granny authentik rotate-secret my-oauth-provider
+granny authentik add-user-to-group user@example.com     # defaults to dash_admins
 granny authentik api GET /api/v3/core/users/me/        # generic escape hatch
 ```
 
@@ -177,7 +176,7 @@ granny authentik api GET /api/v3/core/users/me/        # generic escape hatch
 | AWS inventory | VPCs, Lambdas |
 | Cross-cloud inventory | GPU instances + reservations, credit balances, MTD spend + forecast (AWS, GCP, Azure) |
 | SSL automation | Bunny, Cloudflare, ACM |
-| SSO / IdP | Authentik (provider + application + group provisioning, per-stage stoz3n-dash workflow) |
+| SSO / IdP | Authentik (provider, application, group, and user operations) |
 
 ## As a library
 

@@ -213,11 +213,11 @@ def deploy(
     """Zip ``--source-dir``, upload, sync env vars, and deploy.
 
     Example:
-        granny serverless deploy bessa-wissa-api \\
+        granny serverless deploy my-api \\
             --source-dir backend/dist-bundle \\
-            --namespace bessa-wissa \\
+            --namespace my-app \\
             --env NODE_ENV=production \\
-            --secret STOZ3N_API_TOKEN=$STOZ3N_API_TOKEN
+            --secret API_TOKEN=$API_TOKEN
     """
     c = _client(region)
 

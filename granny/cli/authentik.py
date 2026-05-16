@@ -1,8 +1,4 @@
-"""``granny authentik`` — manage the pseekoo Authentik instance via API.
-
-Wraps :mod:`granny.authentik` so the common Authentik ops (per-stage
-stoz3n-dash provisioning, group plumbing, secret rotation) work from the
-command line without dropping to the admin UI.
+"""``granny authentik`` — manage an Authentik instance via API.
 
 Auth resolution: ``AUTHENTIK_API_TOKEN`` (env / .env / vault) or
 ``AK_TOKEN`` (env / .env). See :meth:`AuthentikClient.from_environment`.
@@ -16,18 +12,14 @@ from typing import Any
 
 import click
 
-from granny.authentik import (
-    ADMIN_GROUP_NAME,
-    STOZ3N_DASH_STAGES,
-    AuthentikClient,
-    AuthentikError,
-    provision_stoz3n_dash,
-)
+from granny.authentik import AuthentikClient, AuthentikError
+
+ADMIN_GROUP_NAME = "dash_admins"
 
 
 @click.group()
 def authentik() -> None:
-    """Manage Authentik (auth.pseekoo.io) via its REST API."""
+    """Manage Authentik via its REST API."""
 
 
 def _client() -> AuthentikClient:
@@ -36,62 +28,6 @@ def _client() -> AuthentikClient:
     except AuthentikError as exc:
         click.echo(str(exc), err=True)
         sys.exit(1)
-
-
-def _print_provision_report(result: Any) -> None:
-    """Pretty-print a ProvisionResult and the paste-ready JSON snippets."""
-    click.echo("", err=True)
-    click.echo("─" * 72)
-    click.echo(f"Stage              : {result.stage}")
-    click.echo(f"Authentik URL      : {result.base_url}")
-    click.echo(f"Issuer             : {result.issuer}")
-    click.echo(f"client_id          : {result.client_id}")
-    click.echo(
-        f"client_secret      : {result.client_secret or '(not echoed — rotate-secret to see)'}"
-    )
-    click.echo(f"redirect_uri       : {result.redirect_uri}")
-    click.echo(f"admin_group        : {result.admin_group}")
-    click.echo(f"scopes             : {result.scopes}")
-    flags = [
-        f"provider={'NEW' if result.created_provider else 'EXISTS'}",
-        f"application={'NEW' if result.created_application else 'EXISTS'}",
-        f"binding={'NEW' if result.created_binding else 'EXISTS'}",
-        f"group={'NEW' if result.created_group else 'EXISTS'}",
-    ]
-    click.echo(f"state              : {', '.join(flags)}")
-    click.echo("─" * 72)
-    click.echo("")
-    click.echo(f"# Paste into dotfiles/stoz3n-chat-agent/config.{result.stage}.json")
-    click.echo(json.dumps(result.chat_agent_oidc_block(), indent=2))
-    click.echo("")
-    click.echo(f"# Paste into dotfiles/stoz3n-agent-dash/config.{result.stage}.json")
-    click.echo(json.dumps(result.dashboard_oidc_block(), indent=2))
-    if not result.client_secret:
-        click.echo("", err=True)
-        click.echo(
-            "WARN: Authentik did not echo client_secret in the response. "
-            "Run `granny authentik rotate-secret " + result.application_slug
-            + "` to mint a fresh secret you can copy.",
-            err=True,
-        )
-
-
-@authentik.command("provision-stoz3n-dash")
-@click.argument("stage", type=click.Choice(sorted(STOZ3N_DASH_STAGES.keys())))
-@click.option(
-    "--rotate",
-    is_flag=True,
-    help="Force a fresh client_secret if the provider already exists.",
-)
-def provision_stoz3n_dash_cmd(stage: str, rotate: bool) -> None:
-    """End-to-end per-stage stoz3n-dashboard provisioning (idempotent)."""
-    client = _client()
-    try:
-        result = provision_stoz3n_dash(client, stage=stage, rotate_secret=rotate)
-    except AuthentikError as exc:
-        click.echo(f"Authentik error: {exc}", err=True)
-        sys.exit(1)
-    _print_provision_report(result)
 
 
 _LIST_ENDPOINTS = {
@@ -201,6 +137,104 @@ def remove_user_from_group_cmd(user: str, group: str) -> None:
         click.echo(f"Authentik error: {exc}", err=True)
         sys.exit(1)
     click.echo(f"Removed {user} from {group}")
+
+
+@authentik.command("create-user")
+@click.argument("username")
+@click.option("--name", default=None, help="Display name (defaults to username).")
+@click.option("--email", default=None, help="Email address.")
+@click.option(
+    "--group",
+    default=None,
+    help="Group to add the new user to after creation (e.g. dash_admins).",
+)
+@click.option(
+    "--password",
+    default=None,
+    help="Set this password directly. Suppresses --recovery-link.",
+)
+@click.option(
+    "--recovery-link/--no-recovery-link",
+    default=True,
+    help="Print a one-shot recovery URL the user opens to set their own password (default: yes).",
+)
+def create_user_cmd(
+    username: str,
+    name: str | None,
+    email: str | None,
+    group: str | None,
+    password: str | None,
+    recovery_link: bool,
+) -> None:
+    """Create an internal Authentik user (idempotent on username).
+
+    Defaults to printing a one-shot recovery URL so the user sets their
+    own password — pass ``--password`` to skip that and set one inline.
+    """
+    if password is not None:
+        recovery_link = False
+    client = _client()
+    try:
+        existed_before = client.find_user_by_username(username) is not None
+        user = client.create_user(username, name=name, email=email)
+        click.echo(
+            f"User {username} {'already exists' if existed_before else 'created'} (pk={user['pk']})"
+        )
+        if group:
+            client.add_user_to_group(username, group)
+            click.echo(f"Added {username} to {group}")
+        if password is not None:
+            client.set_user_password(username, password)
+            click.echo(f"Password set for {username}")
+        if recovery_link:
+            link = client.generate_recovery_link(username)
+            click.echo("")
+            click.echo("Recovery link (single-use, share over a secure channel):")
+            click.echo(f"  {link}")
+    except AuthentikError as exc:
+        click.echo(f"Authentik error: {exc}", err=True)
+        sys.exit(1)
+
+
+@authentik.command("recovery-link")
+@click.argument("username")
+def recovery_link_cmd(username: str) -> None:
+    """Mint a one-shot recovery URL the user opens to set a password."""
+    client = _client()
+    try:
+        link = client.generate_recovery_link(username)
+    except AuthentikError as exc:
+        click.echo(f"Authentik error: {exc}", err=True)
+        sys.exit(1)
+    click.echo(link)
+
+
+@authentik.command("set-password")
+@click.argument("username")
+@click.option("--password", required=True, help="New password to set.")
+def set_password_cmd(username: str, password: str) -> None:
+    """Set a user's password directly (admin reset)."""
+    client = _client()
+    try:
+        client.set_user_password(username, password)
+    except AuthentikError as exc:
+        click.echo(f"Authentik error: {exc}", err=True)
+        sys.exit(1)
+    click.echo(f"Password updated for {username}")
+
+
+@authentik.command("delete-user")
+@click.argument("username")
+@click.confirmation_option(prompt="Really delete this Authentik user?")
+def delete_user_cmd(username: str) -> None:
+    """Delete an Authentik user. No-op if the user doesn't exist."""
+    client = _client()
+    try:
+        client.delete_user(username)
+    except AuthentikError as exc:
+        click.echo(f"Authentik error: {exc}", err=True)
+        sys.exit(1)
+    click.echo(f"User {username} deleted (or already absent)")
 
 
 @authentik.command("api")

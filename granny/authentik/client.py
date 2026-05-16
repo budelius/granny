@@ -256,3 +256,82 @@ class AuthentikClient:
             f"/api/v3/providers/oauth2/{provider['pk']}/",
             body={"client_secret": ""},
         )
+
+    def create_user(
+        self,
+        username: str,
+        *,
+        name: str | None = None,
+        email: str | None = None,
+        path: str = "users",
+        user_type: str = "internal",
+        is_active: bool = True,
+        attributes: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Create an internal Authentik user (idempotent on ``username``).
+
+        If a user with the same ``username`` already exists it is returned
+        unmodified — call ``request("PATCH", …)`` separately if you need to
+        update fields. The default ``path="users"`` puts the user in the
+        regular Authentik directory (not under any LDAP source path), so
+        the user can authenticate against an internal password rather than
+        being bound to Kanidm.
+        """
+        existing = self.find_user_by_username(username)
+        if existing:
+            return existing
+        body: dict[str, Any] = {
+            "username": username,
+            "name": name or username,
+            "is_active": is_active,
+            "type": user_type,
+            "path": path,
+            "groups": [],
+        }
+        if email is not None:
+            body["email"] = email
+        if attributes:
+            body["attributes"] = attributes
+        return self.request("POST", "/api/v3/core/users/", body=body)
+
+    def set_user_password(self, username: str, password: str) -> None:
+        """Set a user's password directly (admin reset, no email)."""
+        user = self.find_user_by_username(username)
+        if not user:
+            raise AuthentikError(404, f"User {username!r} not found")
+        self.request(
+            "POST",
+            f"/api/v3/core/users/{user['pk']}/set_password/",
+            body={"password": password},
+        )
+
+    def delete_user(self, username: str) -> None:
+        """Delete a user by username. No-op if absent."""
+        user = self.find_user_by_username(username)
+        if not user:
+            return
+        self.request("DELETE", f"/api/v3/core/users/{user['pk']}/")
+
+    def generate_recovery_link(self, username: str) -> str:
+        """Mint a one-shot recovery URL for the given user.
+
+        Returns the absolute URL the user opens to set their own password
+        (and enroll MFA if the recovery flow is configured to require it).
+        Authentik invalidates the token after a single use; default TTL is
+        short, set in the recovery flow's stage configuration.
+        """
+        user = self.find_user_by_username(username)
+        if not user:
+            raise AuthentikError(404, f"User {username!r} not found")
+        result = self.request(
+            "POST",
+            f"/api/v3/core/users/{user['pk']}/recovery/",
+        )
+        # Authentik returns {"link": "https://..."} on this endpoint.
+        if isinstance(result, dict) and "link" in result:
+            return result["link"]
+        raise AuthentikError(
+            500,
+            f"Unexpected recovery payload for {username!r}: {result!r}. "
+            "Make sure a recovery flow is configured on the tenant.",
+        )
