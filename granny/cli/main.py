@@ -100,6 +100,11 @@ def _register_commands() -> None:
         cli.add_command(authentik)
     except ImportError:
         pass
+    try:
+        from granny.cli.elk import elk
+        cli.add_command(elk)
+    except ImportError:
+        pass
 
 
 _register_commands()

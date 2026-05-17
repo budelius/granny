@@ -172,6 +172,10 @@ SECRET_MAP: dict[str, str] = {
     # superuser-issued token (Authentik UI → Directory → Tokens). Falls back
     # to AK_TOKEN env var in granny.authentik.AuthentikClient.from_environment.
     "AUTHENTIK_API_TOKEN": "authentik-api-token",
+    # Elasticsearch / Kibana security API credentials for `granny elk …`.
+    "ELASTICSEARCH_API_KEY": "elasticsearch-api-key",
+    "ELASTICSEARCH_USERNAME": "elasticsearch-username",
+    "ELASTICSEARCH_PASSWORD": "elasticsearch-password",
 }
 
 # Module-level cache so vault is only contacted once per process

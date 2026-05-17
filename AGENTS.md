@@ -31,6 +31,7 @@ granny/
                  desec, cloudns, inwx, manual)
   docker/        Multi-arch buildx with hash-derived tags
   edge/          Bunny Edge Scripting
+  elk/           Elasticsearch / Kibana security user management
   email/         Mailjet, AWS WorkMail, SES forwarding
   serverless/    Scaleway FaaS
   storage/       AWS S3, Bunny Storage, Hetzner S3
@@ -86,7 +87,8 @@ Registered keys (`SECRET_MAP` in `granny/credentials/secrets.py`):
 `DOCKER_HUB_USER`/`_TOKEN`,
 `GITLAB_PYPI_USER`/`_PASSWORD`,
 `AUTHENTIK_API_TOKEN` (vault path `granny/infra/authentik-api-token`;
-`granny.authentik` also accepts `AK_TOKEN` as an env-only alias).
+`granny.authentik` also accepts `AK_TOKEN` as an env-only alias),
+`ELASTICSEARCH_API_KEY` or `ELASTICSEARCH_USERNAME`/`_PASSWORD`.
 
 Inspect what's set:
 

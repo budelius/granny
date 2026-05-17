@@ -89,6 +89,7 @@ Common keys:
 | ClouDNS | `CLOUDNS_AUTH_ID`/`_PASSWORD` (or `_SUB_AUTH_ID`/`_SUB_AUTH_USER`) |
 | INWX | `INWX_USERNAME`, `INWX_PASSWORD`, `INWX_SHARED_SECRET` (only with 2FA) |
 | Docker Hub | `DOCKER_HUB_USER`, `DOCKER_HUB_TOKEN` |
+| Elasticsearch / Kibana | `ELASTICSEARCH_URL`, `ELASTICSEARCH_API_KEY` or `ELASTICSEARCH_USERNAME` + `ELASTICSEARCH_PASSWORD` |
 
 Set only the ones you need. Use `granny credentials status` to verify
 what's configured at any time.
@@ -165,6 +166,13 @@ granny authentik list providers
 granny authentik rotate-secret my-oauth-provider
 granny authentik add-user-to-group user@example.com     # defaults to dash_admins
 granny authentik api GET /api/v3/core/users/me/        # generic escape hatch
+
+# Elasticsearch / Kibana users
+granny elk add-user user@example.com \
+  --email user@example.com \
+  --full-name "Example User" \
+  --role kibana_admin \
+  --generate-password
 ```
 
 ## Capability matrix
@@ -182,6 +190,7 @@ granny authentik api GET /api/v3/core/users/me/        # generic escape hatch
 | Cross-cloud inventory | GPU instances + reservations, credit balances, MTD spend + forecast (AWS, GCP, Azure) |
 | SSL automation | Bunny, Cloudflare, ACM |
 | SSO / IdP | Authentik (provider, application, group, and user operations) |
+| Observability admin | Elasticsearch / Kibana native-user management |
 
 ## As a library
 
