@@ -105,6 +105,16 @@ def _register_commands() -> None:
         cli.add_command(elk)
     except ImportError:
         pass
+    try:
+        from granny.cli.azure import azure
+        cli.add_command(azure)
+    except ImportError:
+        pass
+    try:
+        from granny.cli.indexing import indexing
+        cli.add_command(indexing)
+    except ImportError:
+        pass
 
 
 _register_commands()
