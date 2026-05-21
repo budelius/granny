@@ -173,6 +173,21 @@ granny elk add-user user@example.com \
   --full-name "Example User" \
   --role kibana_admin \
   --generate-password
+
+# Azure -- subscriptions, ARM deployments, OpenAI, App Service, VM sizes
+granny azure account whoami                                  # signed-in identity
+granny azure account list                                    # subscriptions
+granny azure deployment list --subscription <id> --all-groups
+granny azure openai accounts --subscription <id>
+granny azure openai deployments --subscription <id> --kind OpenAI
+granny azure webapp list --subscription <id>
+granny azure vm-sizes list --subscription <id> --location polandcentral
+
+# Search-engine indexing (IndexNow + Google Indexing API)
+granny indexing generate-key                                 # mint an IndexNow key
+granny indexing submit https://example.com/new-page          # notify every engine
+granny indexing indexnow https://example.com/p1 https://example.com/p2
+granny indexing google https://example.com/job-posting --action URL_UPDATED
 ```
 
 ## Capability matrix
@@ -191,6 +206,8 @@ granny elk add-user user@example.com \
 | SSL automation | Bunny, Cloudflare, ACM |
 | SSO / IdP | Authentik (provider, application, group, and user operations) |
 | Observability admin | Elasticsearch / Kibana native-user management |
+| Azure ops | Identity, subscriptions, ARM deployments, Cognitive Services (Azure OpenAI), App Service, VM sizes, compute quota |
+| Search indexing | IndexNow (Bing/Yandex/Seznam/Naver/Yep), Google Indexing API |
 
 ## As a library
 
@@ -220,6 +237,8 @@ load_secrets_into_env()
 granny/
   cli/           Click command groups (granny <group> <verb>)
   analyze/      Cross-cloud inventory (AWS, GCP, Azure)
+  authentik/    Authentik admin
+  azure/        Azure account, ARM deployments, Cognitive, App Service, VM sizes, quota
   cdn/          Bunny CDN
   cloudflare/   Cloudflare Workers / D1 / R2 / KV
   create/       Standalone setup scripts (granny create <name>)
@@ -227,7 +246,9 @@ granny/
   dns/          Provider-agnostic DNS CRUD
   docker/       Multi-arch image builds
   edge/         Bunny Edge Scripting
+  elk/          Elasticsearch / Kibana security user management
   email/        Mailjet, WorkMail, SES forwarding
+  indexing/     IndexNow + Google Indexing API
   serverless/   Scaleway FaaS
   storage/      Object storage (AWS / Bunny / Hetzner)
 ```

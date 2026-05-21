@@ -21,8 +21,11 @@ stays out of this repo.
 ```
 granny/
   cli/           Click command groups -- thin shims, no business logic
-  analyze/       Cross-cloud inventory (vpcs, lambdas, gpus, credits, costs)
+  analyze/       Cross-cloud inventory (vpcs, lambdas, gpus, credits, costs,
+                 GPU cluster pricing)
   authentik/     Authentik admin: provider, application, group, and user operations
+  azure/         Azure account/identity, ARM deployments, Cognitive Services
+                 (Azure OpenAI), App Service, VM sizes, and compute quota
   cdn/           Bunny CDN (pull zones, edge rules, SSL, cache)
   cloudflare/    Cloudflare Workers / D1 / R2 / KV (account-level)
   create/        Standalone setup scripts dispatched via `granny create <name>`
@@ -33,6 +36,7 @@ granny/
   edge/          Bunny Edge Scripting
   elk/           Elasticsearch / Kibana security user management
   email/         Mailjet, AWS WorkMail, SES forwarding
+  indexing/      IndexNow + Google Indexing API submission clients
   serverless/    Scaleway FaaS
   storage/       AWS S3, Bunny Storage, Hetzner S3
 scripts/         release.sh / release.ps1 / run-tests.py
