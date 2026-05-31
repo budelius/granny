@@ -111,6 +111,11 @@ def _register_commands() -> None:
     except ImportError:
         pass
     try:
+        from granny.cli.aws import aws
+        cli.add_command(aws)
+    except ImportError:
+        pass
+    try:
         from granny.cli.indexing import indexing
         cli.add_command(indexing)
     except ImportError:
