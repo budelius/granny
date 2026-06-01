@@ -40,13 +40,27 @@ class MailjetClient:
         return resp.json() if resp.text else {}
 
     def find_sender(self, domain: str) -> dict | None:
-        """Find a catch-all ``*@domain`` sender."""
-        result = self._request("GET", "/sender")
-        catch_all = f"*@{domain}"
-        for sender in result.get("Data", []):
-            if sender.get("Email", "").lower() == catch_all.lower():
-                return sender
-        return None
+        """Find a catch-all ``*@domain`` sender.
+
+        Paginates ``GET /sender`` — Mailjet defaults to a 10-row page, so on
+        accounts with many senders a catch-all created earlier can fall off
+        the first page and appear "missing". Walk all pages until found or
+        exhausted.
+        """
+        catch_all = f"*@{domain}".lower()
+        offset = 0
+        limit = 1000
+        while True:
+            result = self._request(
+                "GET", f"/sender?Limit={limit}&Offset={offset}"
+            )
+            data = result.get("Data", [])
+            for sender in data:
+                if sender.get("Email", "").lower() == catch_all:
+                    return sender
+            if len(data) < limit:
+                return None
+            offset += limit
 
     def create_sender(self, domain: str) -> dict:
         catch_all = f"*@{domain}"

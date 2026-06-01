@@ -20,26 +20,85 @@ def mailjet() -> None:
     """Mailjet sender/DNS and contact management."""
 
 
+def _short_name(fqdn: str, domain: str) -> str:
+    """Return the zone-relative short name for ``fqdn`` within ``domain``.
+
+    ``mailjet._domainkey.mezzanin.eu`` + ``mezzanin.eu`` -> ``mailjet._domainkey``
+    ``mezzanin.eu`` + ``mezzanin.eu``                    -> ``@``
+    """
+    fqdn = (fqdn or "").strip().rstrip(".").lower()
+    domain = (domain or "").strip().rstrip(".").lower()
+    if not fqdn or fqdn == domain:
+        return "@"
+    if fqdn.endswith("." + domain):
+        return fqdn[: -(len(domain) + 1)]
+    return fqdn
+
+
+def _upsert_spf(provider, zone_id: str, qualifier: str, ttl: int) -> tuple[str, list[str]]:
+    """Merge ``include:spf.mailjet.com`` into the apex SPF record (or create it).
+
+    Selects the existing SPF record by content (``v=spf1``) rather than by
+    name+type, so a co-resident apex TXT (e.g. a verification token) is never
+    clobbered.
+    """
+    from granny.email.mailjet import merge_spf
+
+    records = provider.list_records(zone_id, name="@", record_type="TXT")
+    spf = next((r for r in records if "v=spf1" in (r.value or "")), None)
+    merged, warnings = merge_spf(spf.value if spf else None, target_qualifier=qualifier)
+    if spf is None:
+        provider.create_record(zone_id, "@", "TXT", merged, ttl=ttl)
+    elif spf.value != merged:
+        provider.update_record(zone_id, spf.id, "@", "TXT", merged, ttl=ttl)
+    return merged, warnings
+
+
 @mailjet.command("setup-dns")
 @click.argument("domain")
 @click.option("--check", "check_only", is_flag=True, help="Read-only DNS status check.")
-@click.option("--dry-run", is_flag=True)
-def mailjet_setup_dns(domain: str, check_only: bool, dry_run: bool) -> None:
-    """Register domain sender and retrieve DNS auth settings.
+@click.option(
+    "--dns-provider",
+    default=None,
+    help="Create the DKIM/SPF/ownership records at this provider "
+    "(e.g. inwx, cloudflare, bunny). Omit to only print them.",
+)
+@click.option(
+    "--validate/--no-validate",
+    default=None,
+    help="Trigger Mailjet's DKIM/SPF check and report status. "
+    "Defaults to on when --dns-provider is used.",
+)
+@click.option("--spf-qualifier", default="~all", show_default=True, help="SPF policy qualifier.")
+@click.option("--ttl", default=3600, show_default=True, help="TTL for created records.")
+@click.option("--dry-run", is_flag=True, help="Show planned record changes without writing.")
+def mailjet_setup_dns(
+    domain: str,
+    check_only: bool,
+    dns_provider: str | None,
+    validate: bool | None,
+    spf_qualifier: str,
+    ttl: int,
+    dry_run: bool,
+) -> None:
+    """Register a Mailjet sender domain and wire up its DNS auth.
 
-    Prints the DKIM, SPF, and ownership values you need to create as TXT
-    records. Use ``granny dns`` to create them.
+    With ``--dns-provider`` granny creates the DKIM, SPF (merged into any
+    existing apex SPF), and ownership TXT records and then asks Mailjet to
+    re-validate. Without it, the records are printed for manual creation.
     """
     from granny.email.mailjet import MailjetClient
 
     c = MailjetClient()
 
     if check_only:
-        sender = c.find_sender(domain)
-        if not sender:
-            click.echo(f"No sender registered for *@{domain}")
-            raise SystemExit(1)
         dns = c.get_dns_settings(domain)
+        if not dns:
+            click.echo(f"No Mailjet DNS settings for {domain}")
+            raise SystemExit(1)
+        sender = c.find_sender(domain)
+        click.echo(f"Sender:      *@{domain} "
+                   f"({'registered' if sender else 'NOT registered'})")
         click.echo(f"DKIM status: {dns.get('DKIMStatus')}")
         click.echo(f"SPF status:  {dns.get('SPFStatus')}")
         return
@@ -48,15 +107,64 @@ def mailjet_setup_dns(domain: str, check_only: bool, dry_run: bool) -> None:
     click.echo(f"Sender: *@{domain} (ID={sender.get('ID')}, Status={sender.get('Status')})")
 
     dns = c.get_dns_settings(domain)
-    click.echo("")
-    click.echo("DNS records to create:")
-    click.echo(f"  DKIM:  TXT  {dns.get('DKIMRecordName', 'mailjet._domainkey.' + domain)}")
-    click.echo(f"         {dns.get('DKIMRecordValue', '(not available)')}")
-    click.echo(f"  SPF:   TXT  {domain}")
-    click.echo(f"         {dns.get('SPFRecordValue', 'v=spf1 include:spf.mailjet.com ~all')}")
-    if dns.get("OwnerShipToken"):
-        click.echo(f"  Owner: TXT  {dns.get('OwnerShipTokenRecordName', domain)}")
-        click.echo(f"         {dns.get('OwnerShipToken')}")
+    dkim_name = (dns.get("DKIMRecordName") or f"mailjet._domainkey.{domain}").rstrip(".")
+    dkim_value = dns.get("DKIMRecordValue", "(not available)")
+    owner_name = (dns.get("OwnerShipTokenRecordName") or domain).rstrip(".")
+    owner_value = dns.get("OwnerShipToken")
+
+    if not dns_provider:
+        click.echo("")
+        click.echo("DNS records to create (pass --dns-provider to apply automatically):")
+        click.echo(f"  DKIM:  TXT  {dkim_name}")
+        click.echo(f"         {dkim_value}")
+        click.echo(f"  SPF:   TXT  {domain}")
+        click.echo(f"         {dns.get('SPFRecordValue', 'v=spf1 include:spf.mailjet.com ' + spf_qualifier)}")
+        if owner_value:
+            click.echo(f"  Owner: TXT  {owner_name}")
+            click.echo(f"         {owner_value}")
+        return
+
+    from granny.dns.factory import get_provider
+
+    provider = get_provider(dns_provider)
+    zone_id = provider.get_zone_id(domain)
+
+    dkim_short = _short_name(dkim_name, domain)
+    owner_short = _short_name(owner_name, domain)
+
+    if dry_run:
+        click.echo("")
+        click.echo(f"[dry-run] would upsert at {dns_provider}:")
+        click.echo(f"  TXT {dkim_short}.{domain} = {dkim_value[:40]}...")
+        click.echo(f"  TXT @ (SPF, merged with include:spf.mailjet.com {spf_qualifier})")
+        if owner_value:
+            click.echo(f"  TXT {owner_short}.{domain} = {owner_value}")
+        return
+
+    provider.upsert_record(zone_id, dkim_short, "TXT", dkim_value, ttl=ttl)
+    click.echo(f"  [ok] DKIM  TXT {dkim_short}.{domain}")
+
+    merged, warnings = _upsert_spf(provider, zone_id, spf_qualifier, ttl)
+    for w in warnings:
+        click.echo(f"  [spf] {w}")
+    click.echo(f"  [ok] SPF   TXT {domain} -> {merged}")
+
+    if owner_value:
+        provider.upsert_record(zone_id, owner_short, "TXT", owner_value, ttl=ttl)
+        click.echo(f"  [ok] Owner TXT {owner_short}.{domain}")
+
+    # Validate unless explicitly disabled.
+    if validate is None:
+        validate = True
+    if validate:
+        dns_id = dns.get("ID")
+        if not dns_id:
+            click.echo("  [warn] no DNS id from Mailjet; skipping validation")
+            return
+        result = c.check_dns(str(dns_id))
+        click.echo("")
+        click.echo(f"Mailjet validation: DKIM={result.get('DKIMStatus')} "
+                   f"SPF={result.get('SPFStatus')}")
 
 
 @mailjet.command("check-contact")
