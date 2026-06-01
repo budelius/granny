@@ -67,3 +67,4 @@ vaultwarden-import-*.csv
 /dist/
 /build/
 
+/.claude/scheduled_*.lock

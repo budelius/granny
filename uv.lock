@@ -1041,7 +1041,7 @@ grpc = [
 
 [[package]]
 name = "granny-devops"
-version = "0.9.3"
+version = "0.10.0"
 source = { editable = "." }
 dependencies = [
     { name = "boto3" },
@@ -1947,8 +1947,8 @@ wheels = [
 
 [[package]]
 name = "locke"
-version = "0.5.1"
-source = { git = "https://gitlab.com/martin-wieser/locke.git?subdirectory=python#ece3bf4b9365716378a69f730e3dc9b3a743e286" }
+version = "0.6.1"
+source = { git = "https://gitlab.com/martin-wieser/locke.git?subdirectory=python#561bafb90d98586879ea848c1a04e333dcccab1f" }
 dependencies = [
     { name = "click" },
     { name = "cryptography" },
