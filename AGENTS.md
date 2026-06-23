@@ -25,7 +25,8 @@ granny/
                  GPU cluster pricing)
   authentik/     Authentik admin: provider, application, group, and user operations
   azure/         Azure account/identity, ARM deployments, Cognitive Services
-                 (Azure OpenAI), App Service, VM sizes, and compute quota
+                 (Azure OpenAI), App Service, VM sizes, VM inventory/lifecycle
+                 (list/deallocate/delete), RBAC role assignment, compute quota
   cdn/           Bunny CDN (pull zones, edge rules, SSL, cache)
   cloudflare/    Cloudflare Workers / D1 / R2 / KV (account-level)
   create/        Standalone setup scripts dispatched via `granny create <name>`

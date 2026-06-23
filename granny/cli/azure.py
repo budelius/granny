@@ -1,8 +1,28 @@
 """CLI commands for Azure operations."""
 
+import functools
 import json
+from collections.abc import Callable
+from typing import Any, TypeVar
 
 import click
+
+F = TypeVar("F", bound=Callable[..., Any])
+
+
+def _clean_errors(func: F) -> F:
+    """Turn ARM RuntimeError/KeyError into a tidy click error (no traceback)."""
+
+    @functools.wraps(func)
+    def wrapper(*args: Any, **kwargs: Any) -> Any:
+        try:
+            return func(*args, **kwargs)
+        except KeyError as e:
+            raise click.ClickException(str(e).strip("\"'")) from e
+        except RuntimeError as e:
+            raise click.ClickException(str(e)) from e
+
+    return wrapper  # type: ignore[return-value]
 
 
 @click.group()
@@ -541,3 +561,237 @@ def vm_sizes_locations(subscription: str, as_json: bool) -> None:
 
     for name in rows:
         click.echo(name)
+
+
+# --- Virtual machines -----------------------------------------------------
+
+
+@azure.group()
+def vm() -> None:
+    """List and remove Azure virtual machines."""
+
+
+@vm.command("list")
+@click.option("--subscription", required=True, help="Azure subscription ID")
+@click.option(
+    "--filter",
+    "filter_text",
+    default=None,
+    help="Substring filter on the VM name",
+)
+@click.option("--json-output", "as_json", is_flag=True, help="Output as JSON")
+@_clean_errors
+def vm_list(subscription: str, filter_text: str | None, as_json: bool) -> None:
+    """List virtual machines in a subscription, with power state."""
+    from dataclasses import asdict
+
+    from granny.azure.vm import list_vms
+
+    rows = list_vms(subscription=subscription)
+    if filter_text:
+        needle = filter_text.lower()
+        rows = [r for r in rows if needle in r.name.lower()]
+
+    if as_json:
+        click.echo(json.dumps([asdict(r) for r in rows], indent=2, default=str))
+        return
+
+    if not rows:
+        click.echo("No virtual machines found.")
+        return
+
+    click.echo(
+        f"\n{'Name':<28} {'Size':<22} {'Power':<14} "
+        f"{'Location':<16} Resource group"
+    )
+    click.echo("-" * 120)
+    for row in rows:
+        click.echo(
+            f"{row.name:<28} {(row.vm_size or '-'):<22} "
+            f"{(row.power_state or '-'):<14} {(row.location or '-'):<16} "
+            f"{row.resource_group or '-'}"
+        )
+
+
+@vm.command("deallocate")
+@click.option("--subscription", required=True, help="Azure subscription ID")
+@click.option("--resource-group", required=True, help="Resource group name")
+@click.option("--name", required=True, help="VM name")
+@click.option("--dry-run", is_flag=True, help="Show the action without running it")
+@click.option("--json-output", "as_json", is_flag=True, help="Output as JSON")
+@_clean_errors
+def vm_deallocate(
+    subscription: str,
+    resource_group: str,
+    name: str,
+    dry_run: bool,
+    as_json: bool,
+) -> None:
+    """Stop and deallocate a VM so compute billing stops (storage still bills)."""
+    from granny.azure.vm import deallocate_vm
+
+    if dry_run:
+        msg = f"Would deallocate {name} in {resource_group}"
+        click.echo(json.dumps({"would_deallocate": name}) if as_json else msg)
+        return
+
+    status = deallocate_vm(subscription, resource_group, name)
+    if as_json:
+        click.echo(json.dumps({"vm": name, "status": status}))
+        return
+    click.echo(f"Deallocate accepted for {name} (HTTP {status}).")
+
+
+@vm.command("delete")
+@click.option("--subscription", required=True, help="Azure subscription ID")
+@click.option("--resource-group", required=True, help="Resource group name")
+@click.option("--name", required=True, help="VM name")
+@click.option("--force", is_flag=True, help="Use Azure forceDeletion (skip graceful)")
+@click.option("--yes", is_flag=True, help="Skip the confirmation prompt")
+@click.option("--dry-run", is_flag=True, help="Show the action without running it")
+@click.option("--json-output", "as_json", is_flag=True, help="Output as JSON")
+@_clean_errors
+def vm_delete(
+    subscription: str,
+    resource_group: str,
+    name: str,
+    force: bool,
+    yes: bool,
+    dry_run: bool,
+    as_json: bool,
+) -> None:
+    """Delete a VM. Attached disks/NICs/public IPs are NOT removed."""
+    from granny.azure.vm import delete_vm
+
+    if dry_run:
+        msg = f"Would delete VM {name} in {resource_group} (force={force})"
+        click.echo(json.dumps({"would_delete": name, "force": force}) if as_json else msg)
+        return
+
+    if not yes and not click.confirm(
+        f"Delete VM {name!r} in resource group {resource_group!r}? "
+        "This cannot be undone"
+    ):
+        click.echo("Aborted.")
+        return
+
+    status = delete_vm(subscription, resource_group, name, force=force)
+    if as_json:
+        click.echo(json.dumps({"vm": name, "status": status}))
+        return
+    click.echo(f"Delete accepted for {name} (HTTP {status}).")
+
+
+# --- RBAC role assignments ------------------------------------------------
+
+
+@azure.group()
+def role() -> None:
+    """Inspect and grant Azure RBAC role assignments."""
+
+
+@role.command("list")
+@click.option("--subscription", required=True, help="Azure subscription ID")
+@click.option("--principal-id", default=None, help="Filter to one principal (object ID)")
+@click.option("--scope", default=None, help="Explicit scope; default is the subscription")
+@click.option("--json-output", "as_json", is_flag=True, help="Output as JSON")
+@_clean_errors
+def role_list(
+    subscription: str,
+    principal_id: str | None,
+    scope: str | None,
+    as_json: bool,
+) -> None:
+    """List role assignments at a scope, optionally for one principal."""
+    from dataclasses import asdict
+
+    from granny.azure.role import list_role_assignments
+
+    rows = list_role_assignments(
+        subscription=subscription, principal_id=principal_id, scope=scope
+    )
+    if as_json:
+        click.echo(json.dumps([asdict(r) for r in rows], indent=2, default=str))
+        return
+
+    if not rows:
+        click.echo("No role assignments found.")
+        return
+
+    click.echo(f"\n{'Principal ID':<38} {'Type':<16} {'Role definition ID':<38} Scope")
+    click.echo("-" * 130)
+    for row in rows:
+        click.echo(
+            f"{(row.principal_id or '-'):<38} {(row.principal_type or '-'):<16} "
+            f"{(row.role_name or '-'):<38} {row.scope or '-'}"
+        )
+
+
+@role.command("assign")
+@click.option("--subscription", required=True, help="Azure subscription ID")
+@click.option("--role-name", required=True, help="Built-in role, e.g. 'Reader'")
+@click.option(
+    "--principal-id",
+    default=None,
+    help="Object ID to grant to; defaults to the signed-in identity",
+)
+@click.option(
+    "--principal-type",
+    default="User",
+    type=click.Choice(["User", "Group", "ServicePrincipal"]),
+    help="Principal type (default: User)",
+)
+@click.option("--scope", default=None, help="Explicit scope; default is the subscription")
+@click.option("--dry-run", is_flag=True, help="Show the action without running it")
+@click.option("--json-output", "as_json", is_flag=True, help="Output as JSON")
+@_clean_errors
+def role_assign(
+    subscription: str,
+    role_name: str,
+    principal_id: str | None,
+    principal_type: str,
+    scope: str | None,
+    dry_run: bool,
+    as_json: bool,
+) -> None:
+    """Grant a built-in role to a principal (defaults to your own account)."""
+    from dataclasses import asdict
+
+    from granny.azure.account import get_signed_in_identity
+    from granny.azure.role import assign_role
+
+    if not principal_id:
+        principal_id = get_signed_in_identity().object_id
+        if not principal_id:
+            raise click.UsageError(
+                "Could not resolve signed-in object ID; pass --principal-id"
+            )
+
+    target = scope or f"subscription {subscription}"
+    if dry_run:
+        payload = {
+            "would_assign": role_name,
+            "principal_id": principal_id,
+            "principal_type": principal_type,
+            "scope": target,
+        }
+        if as_json:
+            click.echo(json.dumps(payload, indent=2))
+        else:
+            click.echo(
+                f"Would grant {role_name!r} to {principal_id} on {target}"
+            )
+        return
+
+    result = assign_role(
+        subscription=subscription,
+        role_name=role_name,
+        principal_id=principal_id,
+        scope=scope,
+        principal_type=principal_type,
+    )
+    if as_json:
+        click.echo(json.dumps(asdict(result), indent=2, default=str))
+        return
+    click.echo(f"Granted {role_name!r} to {principal_id} on {target}.")
+    click.echo(f"Assignment ID: {result.name}")

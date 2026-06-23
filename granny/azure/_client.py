@@ -50,6 +50,41 @@ def get(url: str, *, token: str | None = None) -> dict[str, Any]:
     return response.json()
 
 
+def put(
+    url: str, body: dict[str, Any], *, token: str | None = None
+) -> dict[str, Any]:
+    """Issue a PUT against ARM and return the JSON body (201/200)."""
+    response = requests.put(url, headers=headers(token), json=body, timeout=60)
+    if response.status_code not in (200, 201):
+        raise_response_error("PUT", url, response)
+    return response.json()
+
+
+def delete(url: str, *, token: str | None = None) -> int:
+    """Issue a DELETE against ARM and return the HTTP status code.
+
+    ARM returns 202 (accepted, async) or 204 (no content) on success and 200
+    when the resource was deleted synchronously. 404 is treated as "already
+    gone" and surfaced as a KeyError so callers can distinguish it.
+    """
+    response = requests.delete(url, headers=headers(token), timeout=60)
+    if response.status_code == 404:
+        raise KeyError(f"Azure resource not found: {url}")
+    if response.status_code not in (200, 202, 204):
+        raise_response_error("DELETE", url, response)
+    return response.status_code
+
+
+def post(
+    url: str, body: dict[str, Any] | None = None, *, token: str | None = None
+) -> int:
+    """Issue a POST against ARM (action endpoints) and return the status code."""
+    response = requests.post(url, headers=headers(token), json=body, timeout=60)
+    if response.status_code not in (200, 202, 204):
+        raise_response_error("POST", url, response)
+    return response.status_code
+
+
 def paginate(url: str, *, token: str | None = None) -> Iterator[dict[str, Any]]:
     """Yield each item from a paginated ARM ``value``/``nextLink`` collection."""
     bearer = token if token is not None else get_management_token()

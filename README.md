@@ -182,6 +182,11 @@ granny azure openai accounts --subscription <id>
 granny azure openai deployments --subscription <id> --kind OpenAI
 granny azure webapp list --subscription <id>
 granny azure vm-sizes list --subscription <id> --location polandcentral
+granny azure vm list --subscription <id>                      # running VMs + power state
+granny azure vm deallocate --subscription <id> --resource-group <rg> --name <vm>
+granny azure vm delete --subscription <id> --resource-group <rg> --name <vm> --dry-run
+granny azure role list --subscription <id> --principal-id <oid>
+granny azure role assign --subscription <id> --role-name Reader --dry-run
 
 # Search-engine indexing (IndexNow + Google Indexing API)
 granny indexing generate-key                                 # mint an IndexNow key
@@ -206,7 +211,7 @@ granny indexing google https://example.com/job-posting --action URL_UPDATED
 | SSL automation | Bunny, Cloudflare, ACM |
 | SSO / IdP | Authentik (provider, application, group, and user operations) |
 | Observability admin | Elasticsearch / Kibana native-user management |
-| Azure ops | Identity, subscriptions, ARM deployments, Cognitive Services (Azure OpenAI), App Service, VM sizes, compute quota |
+| Azure ops | Identity, subscriptions, ARM deployments, Cognitive Services (Azure OpenAI), App Service, VM sizes, VM inventory/deallocate/delete, RBAC role assignment, compute quota |
 | Search indexing | IndexNow (Bing/Yandex/Seznam/Naver/Yep), Google Indexing API |
 
 ## As a library
@@ -238,7 +243,7 @@ granny/
   cli/           Click command groups (granny <group> <verb>)
   analyze/      Cross-cloud inventory (AWS, GCP, Azure)
   authentik/    Authentik admin
-  azure/        Azure account, ARM deployments, Cognitive, App Service, VM sizes, quota
+  azure/        Azure account, ARM deployments, Cognitive, App Service, VMs, RBAC roles, quota
   cdn/          Bunny CDN
   cloudflare/   Cloudflare Workers / D1 / R2 / KV
   create/       Standalone setup scripts (granny create <name>)
