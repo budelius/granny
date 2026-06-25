@@ -34,8 +34,22 @@ if [[ -n "$(git status --porcelain)" ]]; then
   exit 1
 fi
 
+# Pick a working Python. On Windows Git Bash `python3` is a Store stub that
+# exists on PATH but fails when run, so probe by actually invoking it.
+PYTHON=""
+for candidate in python3 python; do
+  if "$candidate" -c '' >/dev/null 2>&1; then
+    PYTHON="$candidate"
+    break
+  fi
+done
+if [[ -z "$PYTHON" ]]; then
+  echo "Error: no working Python interpreter found (tried python3, python)"
+  exit 1
+fi
+
 # Read current version
-CURRENT=$(python -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
+CURRENT=$("$PYTHON" -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
 IFS='.' read -r MAJOR MINOR PATCH_NUM <<< "$CURRENT"
 
 case "$BUMP" in
@@ -52,7 +66,7 @@ echo "Bumping $CURRENT -> $NEW_VERSION"
 # Bump version in pyproject.toml. BSD sed (macOS) and GNU sed (Linux) treat
 # `-i` differently: BSD needs an explicit backup-suffix argument, GNU does
 # not. Using a temp-file rewrite sidesteps that.
-python3 - "$NEW_VERSION" <<'PY'
+"$PYTHON" - "$NEW_VERSION" <<'PY'
 import re, sys, pathlib
 v = sys.argv[1]
 p = pathlib.Path("pyproject.toml")
