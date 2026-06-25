@@ -120,6 +120,11 @@ def _register_commands() -> None:
         cli.add_command(indexing)
     except ImportError:
         pass
+    try:
+        from granny.cli.zitadel import zitadel
+        cli.add_command(zitadel)
+    except ImportError:
+        pass
 
 
 _register_commands()

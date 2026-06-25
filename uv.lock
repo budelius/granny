@@ -1041,11 +1041,12 @@ grpc = [
 
 [[package]]
 name = "granny-devops"
-version = "0.11.0"
+version = "0.12.0"
 source = { editable = "." }
 dependencies = [
     { name = "boto3" },
     { name = "click" },
+    { name = "pyjwt", extra = ["crypto"] },
     { name = "python-dotenv" },
     { name = "requests" },
 ]
@@ -1213,6 +1214,7 @@ requires-dist = [
     { name = "prek", marker = "extra == 'dev'", specifier = ">=0.2" },
     { name = "pyairtable", marker = "extra == 'data'", specifier = "~=3.1.1" },
     { name = "pydantic", marker = "extra == 'all'", specifier = ">=2.11.7" },
+    { name = "pyjwt", extras = ["crypto"], specifier = ">=2.8" },
     { name = "pymilvus", marker = "extra == 'all'", specifier = ">=2.5.11" },
     { name = "pymongo", marker = "extra == 'data'", specifier = ">=4.13" },
     { name = "pypdf", marker = "extra == 'all'", specifier = ">=5.6.1" },

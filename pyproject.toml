@@ -11,6 +11,7 @@ dependencies = [
     "click>=8.1",
     "python-dotenv>=1.1.0",
     "requests>=2.32",
+    "pyjwt[crypto]>=2.8",  # Zitadel service-account JWT-profile auth (`granny zitadel`)
 ]
 
 [project.optional-dependencies]
