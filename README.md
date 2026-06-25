@@ -167,6 +167,21 @@ granny authentik rotate-secret my-oauth-provider
 granny authentik add-user-to-group user@example.com     # defaults to dash_admins
 granny authentik api GET /api/v3/core/users/me/        # generic escape hatch
 
+# Zitadel admin (self-hosted OIDC server — same shape as authentik)
+#   Point granny at your Zitadel: set ZITADEL_DOMAIN + a machine credential:
+#     ZITADEL_API_TOKEN  (a PAT, used as a bearer), OR
+#     ZITADEL_SA_KEY / ZITADEL_SA_KEY_FILE  (service-account key JSON; JWT-profile auth)
+#   Vault keys (with the [vault] extra): granny/infra/zitadel-domain, -api-token, -sa-key
+granny zitadel create-project platform
+granny zitadel create-oidc-app platform my-app \
+  --redirect-uri https://app.example.com/oidc/callback
+granny zitadel rotate-secret platform my-app
+granny zitadel create-user alice --email alice@example.com --password 's3cret'
+granny zitadel ensure-role platform admin                 # Zitadel uses project roles, not groups
+granny zitadel grant-user-role platform alice admin       # ...granted to users
+granny zitadel enforce-mfa                                 # forceMfa + passkey + TOTP
+granny zitadel list users                                  # also: projects | apps --project p | roles --project p
+
 # Elasticsearch / Kibana users
 granny elk add-user user@example.com \
   --email user@example.com \

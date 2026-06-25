@@ -50,7 +50,13 @@ def _jwt_profile_token(key: dict[str, Any], base_url: str, *, timeout: float) ->
 
     now = int(time.time())
     assertion = jwt.encode(
-        {"iss": key["userId"], "sub": key["userId"], "aud": base_url, "iat": now, "exp": now + 3600},
+        {
+            "iss": key["userId"],
+            "sub": key["userId"],
+            "aud": base_url,
+            "iat": now,
+            "exp": now + 3600,
+        },
         key["key"],
         algorithm="RS256",
         headers={"kid": key["keyId"]},
@@ -68,7 +74,9 @@ def _jwt_profile_token(key: dict[str, Any], base_url: str, *, timeout: float) ->
         raise ZitadelError(resp.status_code, resp.text)
     token = resp.json().get("access_token")
     if not token:
-        raise ZitadelError(0, f"token endpoint returned no access_token: {resp.text[:200]}")
+        raise ZitadelError(
+            0, f"token endpoint returned no access_token: {resp.text[:200]}"
+        )
     return token
 
 
@@ -115,7 +123,9 @@ class ZitadelClient:
 
         base_url = os.environ.get("ZITADEL_DOMAIN") or get_secret("ZITADEL_DOMAIN")
         if not base_url:
-            raise ZitadelError(0, "ZITADEL_DOMAIN is not set (e.g. https://id.pseekoo.io).")
+            raise ZitadelError(
+                0, "ZITADEL_DOMAIN is not set (e.g. https://id.pseekoo.io)."
+            )
 
         pat = os.environ.get("ZITADEL_API_TOKEN") or get_secret("ZITADEL_API_TOKEN")
         if pat:
@@ -171,7 +181,11 @@ class ZitadelClient:
         data = self.request(
             "POST",
             "/management/v1/projects/_search",
-            body={"queries": [{"nameQuery": {"name": name, "method": "TEXT_QUERY_METHOD_EQUALS"}}]},
+            body={
+                "queries": [
+                    {"nameQuery": {"name": name, "method": "TEXT_QUERY_METHOD_EQUALS"}}
+                ]
+            },
         )
         for proj in (data or {}).get("result", []) or []:
             if proj.get("name") == name:
@@ -192,7 +206,11 @@ class ZitadelClient:
         data = self.request(
             "POST",
             f"/management/v1/projects/{project_id}/apps/_search",
-            body={"queries": [{"nameQuery": {"name": name, "method": "TEXT_QUERY_METHOD_EQUALS"}}]},
+            body={
+                "queries": [
+                    {"nameQuery": {"name": name, "method": "TEXT_QUERY_METHOD_EQUALS"}}
+                ]
+            },
         )
         for app in (data or {}).get("result", []) or []:
             if app.get("name") == name:
@@ -219,16 +237,23 @@ class ZitadelClient:
             "redirectUris": redirect_uris,
             "postLogoutRedirectUris": post_logout_uris or [],
             "responseTypes": ["OIDC_RESPONSE_TYPE_CODE"],
-            "grantTypes": ["OIDC_GRANT_TYPE_AUTHORIZATION_CODE", "OIDC_GRANT_TYPE_REFRESH_TOKEN"],
+            "grantTypes": [
+                "OIDC_GRANT_TYPE_AUTHORIZATION_CODE",
+                "OIDC_GRANT_TYPE_REFRESH_TOKEN",
+            ],
             "appType": "OIDC_APP_TYPE_WEB",
             "authMethodType": (
-                "OIDC_AUTH_METHOD_TYPE_BASIC" if confidential else "OIDC_AUTH_METHOD_TYPE_NONE"
+                "OIDC_AUTH_METHOD_TYPE_BASIC"
+                if confidential
+                else "OIDC_AUTH_METHOD_TYPE_NONE"
             ),
             "version": "OIDC_VERSION_1_0",
             "devMode": dev_mode,
             "accessTokenType": "OIDC_TOKEN_TYPE_JWT",
         }
-        return self.request("POST", f"/management/v1/projects/{project_id}/apps/oidc", body=body)
+        return self.request(
+            "POST", f"/management/v1/projects/{project_id}/apps/oidc", body=body
+        )
 
     # ── Login policy / MFA ───────────────────────────────────────────────
 
@@ -265,16 +290,25 @@ class ZitadelClient:
         }
         self.request("PUT", "/admin/v1/policies/login", body=policy_body)
 
-        results: dict[str, Any] = {"forceMfa": True, "secondFactors": [], "multiFactors": []}
+        results: dict[str, Any] = {
+            "forceMfa": True,
+            "secondFactors": [],
+            "multiFactors": [],
+        }
         if totp:
-            self._add_factor("/admin/v1/policies/login/second_factors", "SECOND_FACTOR_TYPE_OTP")
+            self._add_factor(
+                "/admin/v1/policies/login/second_factors", "SECOND_FACTOR_TYPE_OTP"
+            )
             results["secondFactors"].append("OTP")
         if security_key:
-            self._add_factor("/admin/v1/policies/login/second_factors", "SECOND_FACTOR_TYPE_U2F")
+            self._add_factor(
+                "/admin/v1/policies/login/second_factors", "SECOND_FACTOR_TYPE_U2F"
+            )
             results["secondFactors"].append("U2F")
         if passkey:
             self._add_factor(
-                "/admin/v1/policies/login/multi_factors", "MULTI_FACTOR_TYPE_U2F_WITH_VERIFICATION"
+                "/admin/v1/policies/login/multi_factors",
+                "MULTI_FACTOR_TYPE_U2F_WITH_VERIFICATION",
             )
             results["multiFactors"].append("U2F_WITH_VERIFICATION (passkey)")
         return results
@@ -286,3 +320,193 @@ class ZitadelClient:
         except ZitadelError as exc:
             if exc.status != 409:
                 raise
+
+    # ── Projects / apps (list, get, rotate) ──────────────────────────────
+
+    def list_projects(self) -> list[dict[str, Any]]:
+        data = self.request(
+            "POST", "/management/v1/projects/_search", body={"queries": []}
+        )
+        return (data or {}).get("result", []) or []
+
+    def list_apps(self, project_id: str) -> list[dict[str, Any]]:
+        data = self.request(
+            "POST",
+            f"/management/v1/projects/{project_id}/apps/_search",
+            body={"queries": []},
+        )
+        return (data or {}).get("result", []) or []
+
+    def get_app(self, project_id: str, app_id: str) -> dict[str, Any]:
+        data = self.request(
+            "GET", f"/management/v1/projects/{project_id}/apps/{app_id}"
+        )
+        return (data or {}).get("app", data or {})
+
+    def rotate_app_secret(self, project_id: str, app_id: str) -> dict[str, Any]:
+        """Regenerate an OIDC app's client secret. Returns ``{'clientSecret': ...}`` (shown once)."""
+        return self.request(
+            "POST",
+            f"/management/v1/projects/{project_id}/apps/{app_id}/oidc_config/_generate_client_secret",
+        )
+
+    # ── Users ────────────────────────────────────────────────────────────
+
+    def find_user(self, username: str) -> dict[str, Any] | None:
+        """Find a human user by ``userName`` (exact), or None."""
+        data = self.request(
+            "POST",
+            "/management/v1/users/_search",
+            body={
+                "queries": [
+                    {
+                        "userNameQuery": {
+                            "userName": username,
+                            "method": "TEXT_QUERY_METHOD_EQUALS",
+                        }
+                    }
+                ]
+            },
+        )
+        for user in (data or {}).get("result", []) or []:
+            if user.get("userName") == username:
+                return user
+        return None
+
+    def list_users(self) -> list[dict[str, Any]]:
+        data = self.request(
+            "POST", "/management/v1/users/_search", body={"queries": []}
+        )
+        return (data or {}).get("result", []) or []
+
+    def create_user(
+        self,
+        username: str,
+        *,
+        email: str | None = None,
+        first_name: str = "",
+        last_name: str = "",
+        display_name: str | None = None,
+        password: str | None = None,
+        email_verified: bool = False,
+        password_change_required: bool = False,
+    ) -> dict[str, Any]:
+        """Create a human user (idempotent on ``userName``).
+
+        Returns the existing user dict unchanged if ``username`` already exists,
+        else the create response (carries ``userId``).
+        """
+        existing = self.find_user(username)
+        if existing:
+            return existing
+        body: dict[str, Any] = {
+            "userName": username,
+            "profile": {
+                "firstName": first_name or username,
+                "lastName": last_name or username,
+            },
+        }
+        if display_name:
+            body["profile"]["displayName"] = display_name
+        if email:
+            body["email"] = {"email": email, "isEmailVerified": email_verified}
+        if password:
+            body["password"] = password
+            body["passwordChangeRequired"] = password_change_required
+        return self.request("POST", "/management/v1/users/human/_import", body=body)
+
+    def set_user_password(
+        self, user_id: str, password: str, *, change_required: bool = False
+    ) -> None:
+        """Admin-set a user's password (no email round-trip)."""
+        self.request(
+            "POST",
+            f"/management/v1/users/{user_id}/password",
+            body={
+                "newPassword": {"password": password, "changeRequired": change_required}
+            },
+        )
+
+    def delete_user(self, user_id: str) -> None:
+        """Delete a user by id."""
+        self.request("DELETE", f"/management/v1/users/{user_id}")
+
+    # ── Project roles + user grants (Zitadel's analog to Authentik groups) ─
+    # Zitadel has no flat "groups": authorization is modeled as project ROLES
+    # (defined on a project) plus user GRANTS (a user granted a set of role
+    # keys on a project). `ensure-role` + `grant-user-role` are the closest
+    # faithful mapping of Authentik's ensure-group + add-user-to-group.
+
+    def list_roles(self, project_id: str) -> list[dict[str, Any]]:
+        data = self.request(
+            "POST",
+            f"/management/v1/projects/{project_id}/roles/_search",
+            body={"queries": []},
+        )
+        return (data or {}).get("result", []) or []
+
+    def ensure_role(
+        self,
+        project_id: str,
+        role_key: str,
+        *,
+        display_name: str | None = None,
+        group: str = "",
+    ) -> dict[str, Any]:
+        """Create a project role (idempotent on ``roleKey``)."""
+        for role in self.list_roles(project_id):
+            if role.get("key") == role_key:
+                return role
+        return self.request(
+            "POST",
+            f"/management/v1/projects/{project_id}/roles",
+            body={
+                "roleKey": role_key,
+                "displayName": display_name or role_key,
+                "group": group,
+            },
+        )
+
+    def find_user_grant(self, user_id: str, project_id: str) -> dict[str, Any] | None:
+        data = self.request(
+            "POST",
+            "/management/v1/users/grants/_search",
+            body={
+                "queries": [
+                    {"userIdQuery": {"userId": user_id}},
+                    {"projectIdQuery": {"projectId": project_id}},
+                ]
+            },
+        )
+        for grant in (data or {}).get("result", []) or []:
+            if grant.get("userId") == user_id and grant.get("projectId") == project_id:
+                return grant
+        return None
+
+    def grant_user_role(
+        self, project_id: str, user_id: str, role_keys: list[str]
+    ) -> dict[str, Any]:
+        """Grant project role(s) to a user (idempotent — updates an existing grant)."""
+        existing = self.find_user_grant(user_id, project_id)
+        if existing:
+            grant_id = existing.get("id")
+            self.request(
+                "PUT",
+                f"/management/v1/users/{user_id}/grants/{grant_id}",
+                body={"roleKeys": role_keys},
+            )
+            return {"grantId": grant_id, "roleKeys": role_keys, "updated": True}
+        return self.request(
+            "POST",
+            f"/management/v1/users/{user_id}/grants",
+            body={"projectId": project_id, "roleKeys": role_keys},
+        )
+
+    def revoke_user_role(self, project_id: str, user_id: str) -> None:
+        """Remove a user's grant for ``project_id`` (no-op if absent)."""
+        existing = self.find_user_grant(user_id, project_id)
+        if not existing:
+            return
+        self.request(
+            "DELETE", f"/management/v1/users/{user_id}/grants/{existing.get('id')}"
+        )

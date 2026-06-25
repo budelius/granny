@@ -15,7 +15,10 @@ class TestFromEnvironment:
     def test_pat_used_directly(self):
         with patch.dict(
             "os.environ",
-            {"ZITADEL_DOMAIN": "https://id.example.test", "ZITADEL_API_TOKEN": "pat-123"},
+            {
+                "ZITADEL_DOMAIN": "https://id.example.test",
+                "ZITADEL_API_TOKEN": "pat-123",
+            },
             clear=True,
         ):
             c = ZitadelClient.from_environment()
@@ -28,7 +31,9 @@ class TestFromEnvironment:
                 ZitadelClient.from_environment()
 
     def test_missing_credential_raises(self):
-        with patch.dict("os.environ", {"ZITADEL_DOMAIN": "https://id.example.test"}, clear=True):
+        with patch.dict(
+            "os.environ", {"ZITADEL_DOMAIN": "https://id.example.test"}, clear=True
+        ):
             with pytest.raises(ZitadelError):
                 ZitadelClient.from_environment()
 
@@ -50,7 +55,10 @@ class TestRequest:
             resp.json.return_value = {"ok": True}
             req.return_value = resp
             assert c.request("GET", "management/v1/projects") == {"ok": True}
-            assert req.call_args.kwargs["url"] == "https://id.example.test/management/v1/projects"
+            assert (
+                req.call_args.kwargs["url"]
+                == "https://id.example.test/management/v1/projects"
+            )
 
 
 class TestProjectsAndApps:
@@ -90,3 +98,64 @@ class TestProjectsAndApps:
         assert res["forceMfa"] is True
         assert any(p.endswith("/second_factors") for _, p in calls)
         assert any(p.endswith("/multi_factors") for _, p in calls)
+
+
+class TestUsers:
+    def test_create_user_idempotent(self):
+        c = _client()
+        with patch.object(
+            c, "find_user", return_value={"id": "9", "userName": "alice"}
+        ):
+            with patch.object(c, "request") as req:
+                out = c.create_user("alice", email="a@x.test")
+        assert out["id"] == "9"
+        req.assert_not_called()  # existing user -> no create
+
+    def test_create_user_body_shape(self):
+        c = _client()
+        with patch.object(c, "find_user", return_value=None):
+            with patch.object(c, "request") as req:
+                req.return_value = {"userId": "12"}
+                c.create_user(
+                    "bob", email="b@x.test", password="pw", email_verified=True
+                )
+                body = req.call_args.kwargs["body"]
+        assert body["userName"] == "bob"
+        assert body["email"] == {"email": "b@x.test", "isEmailVerified": True}
+        assert body["password"] == "pw"
+
+    def test_set_user_password_path(self):
+        c = _client()
+        with patch.object(c, "request") as req:
+            c.set_user_password("42", "newpw")
+            assert req.call_args.args == ("POST", "/management/v1/users/42/password")
+            assert req.call_args.kwargs["body"]["newPassword"]["password"] == "newpw"
+
+
+class TestRolesAndGrants:
+    def test_ensure_role_idempotent(self):
+        c = _client()
+        with patch.object(c, "list_roles", return_value=[{"key": "admin"}]):
+            with patch.object(c, "request") as req:
+                c.ensure_role("p1", "admin")
+        req.assert_not_called()
+
+    def test_grant_user_role_creates_when_absent(self):
+        c = _client()
+        with patch.object(c, "find_user_grant", return_value=None):
+            with patch.object(c, "request") as req:
+                req.return_value = {"grantId": "g1"}
+                c.grant_user_role("p1", "u1", ["admin"])
+                assert req.call_args.args == ("POST", "/management/v1/users/u1/grants")
+                assert req.call_args.kwargs["body"] == {
+                    "projectId": "p1",
+                    "roleKeys": ["admin"],
+                }
+
+    def test_rotate_app_secret_endpoint(self):
+        c = _client()
+        with patch.object(c, "request") as req:
+            req.return_value = {"clientSecret": "new"}
+            out = c.rotate_app_secret("p1", "a1")
+            assert "_generate_client_secret" in req.call_args.args[1]
+            assert out["clientSecret"] == "new"
