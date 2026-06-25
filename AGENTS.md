@@ -93,7 +93,10 @@ Registered keys (`SECRET_MAP` in `granny/credentials/secrets.py`):
 `GITLAB_PYPI_USER`/`_PASSWORD`,
 `AUTHENTIK_API_TOKEN` (vault path `granny/infra/authentik-api-token`;
 `granny.authentik` also accepts `AK_TOKEN` as an env-only alias),
-`ELASTICSEARCH_API_KEY` or `ELASTICSEARCH_USERNAME`/`_PASSWORD`.
+`ELASTICSEARCH_API_KEY` or `ELASTICSEARCH_USERNAME`/`_PASSWORD`,
+`STALWART_ADMIN_USER`/`STALWART_ADMIN_PASSWORD` (Basic auth on Stalwart's
+JMAP and REST; base URL overridable via env-only `STALWART_URL`, defaults
+to `https://mail.pseekoo.io`).
 
 Inspect what's set:
 

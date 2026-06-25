@@ -182,6 +182,12 @@ SECRET_MAP: dict[str, str] = {
     "ELASTICSEARCH_API_KEY": "elasticsearch-api-key",
     "ELASTICSEARCH_USERNAME": "elasticsearch-username",
     "ELASTICSEARCH_PASSWORD": "elasticsearch-password",
+    # Stalwart mail server admin (Basic auth on JMAP / REST). The username is
+    # not secret but is registered alongside the password so both can come from
+    # the same vault item. Base URL defaults to https://mail.pseekoo.io in
+    # StalwartClient.from_environment() and is overridable via STALWART_URL.
+    "STALWART_ADMIN_USER": "stalwart-admin-user",
+    "STALWART_ADMIN_PASSWORD": "stalwart-admin-password",
 }
 
 # Module-level cache so vault is only contacted once per process

@@ -330,3 +330,122 @@ def workmail_reset_password(
         raise click.ClickException(f"User not found: {user_email}")
     wm.reset_password(org_id, user["Id"], password)
     click.echo(f"Password reset for {user_email}.")
+
+
+# -- Stalwart subgroup --------------------------------------------------------
+
+
+@email.group("stalwart")
+def stalwart() -> None:
+    """Stalwart mail server admin (domains, mailboxes, DNS, delivery test)."""
+
+
+@stalwart.command("list-domains")
+def stalwart_list_domains() -> None:
+    """List configured local domains."""
+    from granny.email.stalwart import StalwartClient
+
+    c = StalwartClient.from_environment()
+    domains = c.list_domains()
+    if not domains:
+        click.echo("No domains configured.")
+        return
+    for d in domains:
+        dkim = (d.get("dkimManagement") or {}).get("@type", "?")
+        click.echo(
+            f"  {d.get('id', '?'):<5} {d.get('name', '?'):<30} "
+            f"enabled={d.get('isEnabled')}  dkim={dkim}"
+        )
+
+
+@stalwart.command("add-domain")
+@click.argument("name")
+def stalwart_add_domain(name: str) -> None:
+    """Create a new local domain (Manual cert, Automatic DKIM, Manual DNS)."""
+    from granny.email.stalwart import StalwartClient
+
+    c = StalwartClient.from_environment()
+    created = c.add_domain(name)
+    click.echo(f"Domain {name} ready (id={created.get('id')})")
+    click.echo(f"Next: granny email stalwart show-dns {name}")
+
+
+@stalwart.command("list-mailboxes")
+def stalwart_list_mailboxes() -> None:
+    """List individual mailboxes."""
+    from granny.email.stalwart import StalwartClient
+
+    c = StalwartClient.from_environment()
+    mailboxes = c.list_mailboxes()
+    if not mailboxes:
+        click.echo("No mailboxes configured.")
+        return
+    for a in mailboxes:
+        role = (a.get("roles") or {}).get("@type", "?")
+        click.echo(
+            f"  {a.get('id', '?'):<5} {a.get('emailAddress', '?'):<40} role={role}"
+        )
+
+
+@stalwart.command("add-mailbox")
+@click.argument("email_address")
+@click.option("--description", default=None, help="Free-text mailbox description.")
+@click.option(
+    "--password",
+    default=None,
+    help="Use this password instead of generating one (NOT recommended).",
+)
+def stalwart_add_mailbox(
+    email_address: str, description: str | None, password: str | None,
+) -> None:
+    """Create a mailbox under an existing local domain.
+
+    The generated password is shown ONCE on stdout. Save it immediately
+    (e.g. into Vaultwarden) — Stalwart hashes it server-side.
+    """
+    from granny.email.stalwart import StalwartClient
+
+    c = StalwartClient.from_environment()
+    record, generated = c.add_mailbox(
+        email_address, password=password, description=description,
+    )
+    click.echo(f"Mailbox created (id={record.get('id')})")
+    click.echo("")
+    click.echo(f"  Email:    {email_address}")
+    click.echo(f"  Password: {generated}")
+    click.echo("")
+    base = c.base_url.removeprefix("https://").removeprefix("http://")
+    click.echo(f"  SMTP submission: {base}:587 (STARTTLS) or :465 (implicit TLS)")
+    click.echo(f"  IMAP:            {base}:993")
+    click.echo(f"  JMAP / WebDAV:   {c.base_url}/")
+    click.echo("")
+    click.echo("  This password is shown ONCE — save it now.")
+
+
+@stalwart.command("show-dns")
+@click.argument("name")
+def stalwart_show_dns(name: str) -> None:
+    """Print Stalwart's generated DNS zone for a domain.
+
+    Output is in BIND zone-file syntax (SPF, MX, DKIM, DMARC, MTA-STS,
+    TLS-RPT, SRV autoconfig). Publish at the domain's registrar.
+    """
+    from granny.email.stalwart import StalwartClient
+
+    c = StalwartClient.from_environment()
+    click.echo(c.get_dns_zone(name))
+
+
+@stalwart.command("delivery-test")
+@click.argument("recipient")
+def stalwart_delivery_test(recipient: str) -> None:
+    """Stream Stalwart's live deliverability report for one recipient.
+
+    Mirrors the admin UI's *Live Delivery Test* page (MX lookup,
+    MTA-STS, TLS-RPT, banner, STARTTLS, etc.).
+    """
+    from granny.email.stalwart import StalwartClient
+
+    c = StalwartClient.from_environment()
+    for line in c.stream_delivery_test(recipient):
+        click.echo(line)
