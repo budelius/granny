@@ -275,19 +275,61 @@ def delete_user_cmd(user: str, dry_run: bool) -> None:
     click.echo(json.dumps({"user": user, "deleted": True}, indent=2))
 
 
+# ── personal access tokens ─────────────────────────────────────────────────
+
+
+@zitadel.command("create-pat")
+@click.argument("user")
+@click.option(
+    "--expiration",
+    default=None,
+    help="RFC3339 expiry, e.g. 2027-06-27T00:00:00Z (omit for non-expiring).",
+)
+@click.option("--dry-run", is_flag=True, help="Change nothing.")
+def create_pat_cmd(user: str, expiration: str | None, dry_run: bool) -> None:
+    """Mint a personal access token for machine USER (userName or id).
+
+    Prints {tokenId, token}. The token is shown ONCE — capture it and store it
+    at vault `granny/infra/zitadel-api-token` (or export ZITADEL_API_TOKEN).
+    """
+    if dry_run:
+        click.echo(f"[DRY RUN] Would create a PAT for {user!r} (expiration={expiration})")
+        return
+    client = _client()
+    out = client.create_pat(_resolve_user(client, user), expiration_date=expiration)
+    click.echo(json.dumps({"tokenId": out.get("tokenId"), "token": out.get("token")}, indent=2))
+
+
+@zitadel.command("revoke-pat")
+@click.argument("user")
+@click.argument("token_id")
+@click.option("--dry-run", is_flag=True, help="Change nothing.")
+def revoke_pat_cmd(user: str, token_id: str, dry_run: bool) -> None:
+    """Revoke PAT TOKEN_ID belonging to machine USER (userName or id)."""
+    if dry_run:
+        click.echo(f"[DRY RUN] Would revoke PAT {token_id} of {user!r}")
+        return
+    client = _client()
+    client.delete_pat(_resolve_user(client, user), token_id)
+    click.echo(json.dumps({"user": user, "tokenId": token_id, "revoked": True}, indent=2))
+
+
 # ── list ─────────────────────────────────────────────────────────────────
 
 
 @zitadel.command("list")
-@click.argument("kind", type=click.Choice(["users", "projects", "apps", "roles"]))
+@click.argument("kind", type=click.Choice(["users", "projects", "apps", "roles", "pats"]))
 @click.option(
     "--project", default=None, help="Project (id or name) — required for apps/roles."
 )
 @click.option(
+    "--user", default=None, help="User (userName or id) — required for pats."
+)
+@click.option(
     "--json", "as_json", is_flag=True, help="Emit full JSON instead of a table."
 )
-def list_cmd(kind: str, project: str | None, as_json: bool) -> None:
-    """List Zitadel objects of KIND (users | projects | apps | roles)."""
+def list_cmd(kind: str, project: str | None, user: str | None, as_json: bool) -> None:
+    """List Zitadel objects of KIND (users | projects | apps | roles | pats)."""
     client = _client()
     if kind == "users":
         rows = client.list_users()
@@ -295,6 +337,12 @@ def list_cmd(kind: str, project: str | None, as_json: bool) -> None:
     elif kind == "projects":
         rows = client.list_projects()
         cols = ("id", "name", "state")
+    elif kind == "pats":
+        if not user:
+            click.echo("--user is required for `list pats`", err=True)
+            sys.exit(1)
+        rows = client.list_pats(_resolve_user(client, user))
+        cols = ("id", "expirationDate", "creationDate")
     else:
         if not project:
             click.echo(f"--project is required for `list {kind}`", err=True)

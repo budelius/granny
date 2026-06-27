@@ -431,6 +431,28 @@ class ZitadelClient:
         """Delete a user by id."""
         self.request("DELETE", f"/management/v1/users/{user_id}")
 
+    # ── Personal access tokens (machine-user bearer tokens) ───────────────
+    # A PAT is a long-lived bearer for a machine user — what other projects
+    # store at vault ``granny/infra/zitadel-api-token`` so granny authenticates
+    # without the service-account key. The token value is returned ONCE.
+
+    def list_pats(self, user_id: str) -> list[dict[str, Any]]:
+        data = self.request(
+            "POST", f"/management/v1/users/{user_id}/pats/_search", body={"queries": []}
+        )
+        return (data or {}).get("result", []) or []
+
+    def create_pat(self, user_id: str, *, expiration_date: str | None = None) -> dict[str, Any]:
+        """Create a PAT for ``user_id``. Returns {tokenId, token} (token shown once)."""
+        body: dict[str, Any] = {}
+        if expiration_date:
+            body["expirationDate"] = expiration_date
+        return self.request("POST", f"/management/v1/users/{user_id}/pats", body=body)
+
+    def delete_pat(self, user_id: str, token_id: str) -> None:
+        """Revoke a PAT by its token id."""
+        self.request("DELETE", f"/management/v1/users/{user_id}/pats/{token_id}")
+
     # ── Project roles + user grants (Zitadel's analog to Authentik groups) ─
     # Zitadel has no flat "groups": authorization is modeled as project ROLES
     # (defined on a project) plus user GRANTS (a user granted a set of role

@@ -159,3 +159,35 @@ class TestRolesAndGrants:
             out = c.rotate_app_secret("p1", "a1")
             assert "_generate_client_secret" in req.call_args.args[1]
             assert out["clientSecret"] == "new"
+
+
+class TestPATs:
+    def test_create_pat_with_expiration(self):
+        c = _client()
+        with patch.object(c, "request") as req:
+            req.return_value = {"tokenId": "t1", "token": "pat-xyz"}
+            out = c.create_pat("u1", expiration_date="2027-06-27T00:00:00Z")
+            assert req.call_args.args == ("POST", "/management/v1/users/u1/pats")
+            assert req.call_args.kwargs["body"] == {
+                "expirationDate": "2027-06-27T00:00:00Z"
+            }
+            assert out["token"] == "pat-xyz"
+
+    def test_create_pat_without_expiration_sends_empty_body(self):
+        c = _client()
+        with patch.object(c, "request") as req:
+            req.return_value = {"tokenId": "t1", "token": "p"}
+            c.create_pat("u1")
+            assert req.call_args.kwargs["body"] == {}
+
+    def test_delete_pat_path(self):
+        c = _client()
+        with patch.object(c, "request") as req:
+            c.delete_pat("u1", "t1")
+            assert req.call_args.args == ("DELETE", "/management/v1/users/u1/pats/t1")
+
+    def test_list_pats_returns_result(self):
+        c = _client()
+        with patch.object(c, "request") as req:
+            req.return_value = {"result": [{"id": "t1"}]}
+            assert c.list_pats("u1") == [{"id": "t1"}]
