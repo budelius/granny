@@ -168,10 +168,13 @@ granny authentik add-user-to-group user@example.com     # defaults to dash_admin
 granny authentik api GET /api/v3/core/users/me/        # generic escape hatch
 
 # Zitadel admin (self-hosted OIDC server — same shape as authentik)
-#   Point granny at your Zitadel: set ZITADEL_DOMAIN + a machine credential:
+#   ZITADEL_DOMAIN  (e.g. https://id.example.com) — plain config, NOT a secret;
+#     set it via env or .env/.deploy.env (granny auto-loads those). Not vaulted.
+#   Plus one machine credential:
 #     ZITADEL_API_TOKEN  (a PAT, used as a bearer), OR
 #     ZITADEL_SA_KEY / ZITADEL_SA_KEY_FILE  (service-account key JSON; JWT-profile auth)
-#   Vault keys (with the [vault] extra): granny/infra/zitadel-domain, -api-token, -sa-key
+#   Secret vault keys (with the [vault] extra): granny/infra/zitadel-api-token, -sa-key
+#   Mint a PAT reproducibly:  granny zitadel create-pat iam-admin --expiration 2027-06-27T00:00:00Z
 granny zitadel create-project platform
 granny zitadel create-oidc-app platform my-app \
   --redirect-uri https://app.example.com/oidc/callback

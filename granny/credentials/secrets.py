@@ -172,9 +172,10 @@ SECRET_MAP: dict[str, str] = {
     # superuser-issued token (Authentik UI → Directory → Tokens). Falls back
     # to AK_TOKEN env var in granny.authentik.AuthentikClient.from_environment.
     "AUTHENTIK_API_TOKEN": "authentik-api-token",
-    # Zitadel OIDC server (`granny zitadel …`): the IdP base URL, an optional
-    # PAT, and the service-account key JSON used for JWT-profile machine auth.
-    "ZITADEL_DOMAIN": "zitadel-domain",
+    # Zitadel OIDC server (`granny zitadel …`): an optional PAT and the
+    # service-account key JSON used for JWT-profile machine auth. The IdP base
+    # URL (ZITADEL_DOMAIN) is plain config, NOT a secret — set it via env /
+    # .env / .deploy.env, so it is deliberately not mapped to the vault.
     "ZITADEL_API_TOKEN": "zitadel-api-token",
     "ZITADEL_SA_KEY": "zitadel-sa-key",
     # Elasticsearch / Kibana security API credentials for `granny elk …`.

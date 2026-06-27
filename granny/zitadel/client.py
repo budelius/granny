@@ -109,7 +109,9 @@ class ZitadelClient:
     def from_environment(cls) -> "ZitadelClient":
         """Build a client from env vars + granny's secret pipeline.
 
-        Base URL: ``ZITADEL_DOMAIN`` (e.g. ``https://id.pseekoo.io``).
+        Base URL: ``ZITADEL_DOMAIN`` (e.g. ``https://id.pseekoo.io``) — this is
+        plain config, NOT a secret, so set it via env / .env / .deploy.env; it
+        is deliberately not vault-resolved.
 
         Credential resolution (first match wins):
 
@@ -121,10 +123,15 @@ class ZitadelClient:
         """
         from granny.credentials import get_secret
 
-        base_url = os.environ.get("ZITADEL_DOMAIN") or get_secret("ZITADEL_DOMAIN")
+        # The IdP base URL is config, not a secret — env / .env / .deploy.env
+        # only (deliberately not vault-resolved).
+        base_url = os.environ.get("ZITADEL_DOMAIN")
         if not base_url:
             raise ZitadelError(
-                0, "ZITADEL_DOMAIN is not set (e.g. https://id.pseekoo.io)."
+                0,
+                "ZITADEL_DOMAIN is not set. It is config, not a secret — set it "
+                "via env or .env/.deploy.env, e.g. "
+                "ZITADEL_DOMAIN=https://id.pseekoo.io",
             )
 
         pat = os.environ.get("ZITADEL_API_TOKEN") or get_secret("ZITADEL_API_TOKEN")
