@@ -101,7 +101,7 @@ class CloudflareDNSProvider(DNSProvider):
                 DNSRecord(
                     name=rec.get("name", ""),
                     type=rec.get("type", ""),
-                    value=rec.get("content", ""),
+                    value=self._record_value(rec),
                     ttl=int(rec.get("ttl", 300)),
                     id=rec.get("id"),
                     fqdn=rec.get("name"),
@@ -109,6 +109,61 @@ class CloudflareDNSProvider(DNSProvider):
                 )
             )
         return out
+
+    @staticmethod
+    def _record_value(rec: dict) -> str:
+        """Reconstruct a BIND-style value string from a Cloudflare record.
+
+        MX prepends its ``priority``; SRV expands its ``data`` object to
+        ``priority weight port target``. Everything else uses ``content``.
+        Keeping the round-tripped value in this shape lets ``upsert_record``
+        compare against the value callers pass and stay idempotent.
+        """
+        rtype = rec.get("type", "")
+        content = rec.get("content", "") or ""
+        if rtype == "MX" and rec.get("priority") is not None:
+            return f"{rec['priority']} {content}".strip()
+        if rtype == "SRV":
+            data = rec.get("data") or {}
+            if data:
+                return (
+                    f"{data.get('priority', 0)} {data.get('weight', 0)} "
+                    f"{data.get('port', 0)} {str(data.get('target', '')).rstrip('.')}"
+                )
+        return content
+
+    @staticmethod
+    def _type_payload(record_type: str, value: str) -> dict:
+        """Build the type-specific Cloudflare payload fields.
+
+        MX and SRV can't be expressed with a bare ``content`` string —
+        Cloudflare requires a separate ``priority`` (MX) or a structured
+        ``data`` object (SRV). Both accept the BIND-style value granny passes
+        around: ``"10 mail.example.com"`` for MX and
+        ``"0 1 443 mail.example.com"`` (priority weight port target) for SRV.
+        A bare MX target defaults to priority 10.
+        """
+        rtype = record_type.upper()
+        parts = value.split()
+        if rtype == "MX":
+            if len(parts) == 2 and parts[0].isdigit():
+                return {"content": parts[1].rstrip("."), "priority": int(parts[0])}
+            return {"content": value.rstrip("."), "priority": 10}
+        if rtype == "SRV":
+            if len(parts) != 4:
+                raise ValueError(
+                    f"SRV value must be 'priority weight port target', got {value!r}"
+                )
+            prio, weight, port, target = parts
+            return {
+                "data": {
+                    "priority": int(prio),
+                    "weight": int(weight),
+                    "port": int(port),
+                    "target": target.rstrip("."),
+                }
+            }
+        return {"content": value}
 
     def get_record(
         self, zone_id: str, name: str, record_type: str
@@ -134,20 +189,22 @@ class CloudflareDNSProvider(DNSProvider):
         payload = {
             "type": record_type.upper(),
             "name": fqdn,
-            "content": value,
             # Cloudflare uses ttl=1 as the sentinel for "automatic". Anything
             # else must be >= 60. Match manage-dns.sh's behavior: if caller
             # passes ttl<=1, use automatic; otherwise send the value.
             "ttl": 1 if ttl <= 1 else ttl,
             "proxied": proxied,
         }
+        # MX needs a separate `priority`, SRV a structured `data` object;
+        # everything else is a plain `content` string.
+        payload.update(self._type_payload(record_type, value))
         body = self._request("POST", f"/zones/{zone_id}/dns_records", json=payload)
         rec = body.get("result") or {}
         logger.info("Cloudflare: created %s %s -> %s", record_type, fqdn, value)
         return DNSRecord(
             name=rec.get("name", fqdn),
             type=rec.get("type", record_type.upper()),
-            value=rec.get("content", value),
+            value=self._record_value(rec) or value,
             ttl=int(rec.get("ttl", ttl)),
             id=rec.get("id"),
             fqdn=rec.get("name", fqdn),
@@ -168,10 +225,10 @@ class CloudflareDNSProvider(DNSProvider):
         payload = {
             "type": record_type.upper(),
             "name": fqdn,
-            "content": value,
             "ttl": 1 if ttl <= 1 else ttl,
             "proxied": proxied,
         }
+        payload.update(self._type_payload(record_type, value))
         body = self._request(
             "PUT", f"/zones/{zone_id}/dns_records/{record_id}", json=payload
         )
@@ -180,7 +237,7 @@ class CloudflareDNSProvider(DNSProvider):
         return DNSRecord(
             name=rec.get("name", fqdn),
             type=rec.get("type", record_type.upper()),
-            value=rec.get("content", value),
+            value=self._record_value(rec) or value,
             ttl=int(rec.get("ttl", ttl)),
             id=rec.get("id", record_id),
             fqdn=rec.get("name", fqdn),

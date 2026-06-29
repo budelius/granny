@@ -107,7 +107,7 @@ class BunnyDNSProvider(DNSProvider):
                 DNSRecord(
                     name=rec.get("Name", "") or "",
                     type=RECORD_TYPE_NAMES.get(rec.get("Type", -1), "?"),
-                    value=rec.get("Value", ""),
+                    value=self._record_value(rec),
                     ttl=int(rec.get("Ttl", 300)),
                     id=str(rec.get("Id")),
                     provider_data=rec,
@@ -124,26 +124,78 @@ class BunnyDNSProvider(DNSProvider):
         ttl: int = 300,
         proxied: bool = False,
     ) -> DNSRecord:
-        type_num = RECORD_TYPES.get(record_type.upper())
+        rtype = record_type.upper()
+        type_num = RECORD_TYPES.get(rtype)
         if type_num is None:
             raise ValueError(f"Unknown record type: {record_type}")
         short_name = "" if name in ("@", None) else name
+        record_value = value.rstrip(".") if rtype == "CNAME" else value
+        priority: int | None = None
+        extra: dict[str, int] = {}
+        if rtype == "MX":
+            # BIND-style "10 mail.example.com" → Priority + target.
+            head, _, tail = value.strip().partition(" ")
+            if head.isdigit() and tail:
+                priority = int(head)
+                record_value = tail.rstrip(".")
+        elif rtype == "SRV":
+            # BIND-style "priority weight port target" → Bunny's separate
+            # Priority/Weight/Port fields plus Value=target.
+            parts = value.split()
+            if len(parts) != 4:
+                raise ValueError(
+                    f"SRV value must be 'priority weight port target', got {value!r}"
+                )
+            prio, weight, port, target = parts
+            priority = int(prio)
+            extra = {"Weight": int(weight), "Port": int(port)}
+            record_value = target.rstrip(".")
         payload = {
             "Type": type_num,
             "Name": short_name,
-            "Value": value.rstrip(".") if record_type.upper() == "CNAME" else value,
+            "Value": record_value,
             "Ttl": ttl,
         }
+        if priority is not None:
+            payload["Priority"] = priority
+        payload.update(extra)
         result = self._request("PUT", f"/dnszone/{zone_id}/records", payload)
         logger.info("Bunny DNS: created %s %s -> %s", record_type, short_name, value)
+        # Build the display value from what we sent — Bunny's create response
+        # doesn't reliably echo Priority/Weight/Port back.
+        if rtype == "MX" and priority is not None:
+            display_value = f"{priority} {record_value}"
+        elif rtype == "SRV":
+            display_value = f"{priority} {extra['Weight']} {extra['Port']} {record_value}"
+        else:
+            display_value = record_value
         return DNSRecord(
             name=short_name,
-            type=record_type.upper(),
-            value=payload["Value"],
+            type=rtype,
+            value=display_value,
             ttl=ttl,
             id=str(result.get("Id")) if isinstance(result, dict) else None,
             provider_data=result if isinstance(result, dict) else {},
         )
+
+    @staticmethod
+    def _record_value(rec: dict) -> str:
+        """Reconstruct a BIND-style value from a Bunny record.
+
+        MX prepends ``Priority``; SRV expands to ``priority weight port
+        target``. Keeps round-tripped values in the same shape callers pass,
+        so ``upsert_record`` compares equal and stays idempotent.
+        """
+        value = rec.get("Value", "") or ""
+        rtype = rec.get("Type")
+        if rtype == RECORD_TYPES["MX"]:
+            return f"{rec.get('Priority', 0)} {value}".strip()
+        if rtype == RECORD_TYPES["SRV"]:
+            return (
+                f"{rec.get('Priority', 0)} {rec.get('Weight', 0)} "
+                f"{rec.get('Port', 0)} {value}"
+            )
+        return value
 
     def delete_record(self, zone_id: str, record_id: str) -> None:
         self._request("DELETE", f"/dnszone/{zone_id}/records/{record_id}")

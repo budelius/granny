@@ -43,16 +43,19 @@ def _split_fqdn(value: str, domain: str | None) -> tuple[str, str]:
 
     if "." in value:
         value_lower = value.lower()
-        if domain and value_lower != domain and not value_lower.endswith(f".{domain}"):
-            raise click.UsageError(
-                f"{value!r} is not under domain {domain!r}"
-            )
         if domain is None:
             return ("@", value_lower)
         if value_lower == domain:
             return ("@", domain)
-        short = value_lower[: -(len(domain) + 1)]
-        return (short, domain)
+        if value_lower.endswith(f".{domain}"):
+            short = value_lower[: -(len(domain) + 1)]
+            return (short, domain)
+        # A dotted name that's neither the zone apex nor a FQDN under it.
+        # With an explicit --domain this is a multi-label *relative* subname
+        # (e.g. ``_smtp._tls`` or ``v1-rsa-20260629._domainkey``), so treat it
+        # as relative to the zone rather than rejecting it. The resulting FQDN
+        # is echoed back, so a genuine wrong-domain typo stays visible.
+        return (value_lower, domain)
 
     # Bare label — needs a domain.
     if not domain:
