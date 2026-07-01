@@ -411,6 +411,113 @@ def openai_deployments(
         )
 
 
+@openai.command("keys")
+@click.option("--subscription", required=True, help="Azure subscription ID")
+@click.option("--resource-group", required=True, help="Resource group name")
+@click.option("--account", "account_name", required=True, help="Cognitive Services account")
+@click.option("--json-output", "as_json", is_flag=True, help="Output as JSON")
+@_clean_errors
+def openai_keys(
+    subscription: str,
+    resource_group: str,
+    account_name: str,
+    as_json: bool,
+) -> None:
+    """Print the account's access keys (key1/key2)."""
+    from granny.azure.openai import get_account_keys
+
+    keys = get_account_keys(subscription, resource_group, account_name)
+    if as_json:
+        click.echo(json.dumps(keys, indent=2))
+        return
+    click.echo(f"key1: {keys.get('key1', '')}")
+    click.echo(f"key2: {keys.get('key2', '')}")
+
+
+@openai.group("deployment")
+def openai_deployment() -> None:
+    """Create Azure OpenAI model deployments."""
+
+
+@openai_deployment.command("create")
+@click.option("--subscription", required=True, help="Azure subscription ID (regular, not sponsorship)")
+@click.option("--resource-group", required=True, help="Resource group name")
+@click.option("--account", "account_name", required=True, help="Azure OpenAI (Cognitive Services) account")
+@click.option("--name", "deployment_name", required=True, help="Deployment name callers request")
+@click.option("--model", "model_name", required=True, help="Model, e.g. gpt-4o")
+@click.option("--model-version", default=None, help="Model version, e.g. 2024-08-06")
+@click.option("--model-format", default="OpenAI", show_default=True)
+@click.option("--sku", "sku_name", default="GlobalStandard", show_default=True, help="Deployment SKU")
+@click.option("--capacity", "sku_capacity", default=1, type=int, show_default=True, help="SKU capacity (thousands of TPM)")
+@click.option("--dry-run", is_flag=True, help="Show the action without running it")
+@click.option("--json-output", "as_json", is_flag=True, help="Output as JSON")
+@_clean_errors
+def openai_deployment_create(
+    subscription: str,
+    resource_group: str,
+    account_name: str,
+    deployment_name: str,
+    model_name: str,
+    model_version: str | None,
+    model_format: str,
+    sku_name: str,
+    sku_capacity: int,
+    dry_run: bool,
+    as_json: bool,
+) -> None:
+    """Create (or update) an Azure OpenAI model deployment.
+
+    Billing follows the resource's subscription — pass the regular subscription
+    to avoid spending sponsorship credit. JSON output includes the account
+    ``endpoint`` so a caller can build a gateway route in one step.
+    """
+    from dataclasses import asdict
+
+    from granny.azure.openai import create_deployment, get_account
+
+    if dry_run:
+        payload = {
+            "would_create": deployment_name,
+            "account": account_name,
+            "resource_group": resource_group,
+            "model": model_name,
+            "model_version": model_version,
+            "sku": sku_name,
+            "capacity": sku_capacity,
+        }
+        if as_json:
+            click.echo(json.dumps(payload, indent=2, default=str))
+        else:
+            click.echo(
+                f"Would create deployment {deployment_name!r} "
+                f"({model_name} {model_version or ''}) in account {account_name!r}"
+            )
+        return
+
+    dep = create_deployment(
+        subscription=subscription,
+        resource_group=resource_group,
+        account_name=account_name,
+        deployment_name=deployment_name,
+        model_name=model_name,
+        model_version=model_version,
+        model_format=model_format,
+        sku_name=sku_name,
+        sku_capacity=sku_capacity,
+    )
+    account = get_account(subscription, resource_group, account_name)
+    if as_json:
+        out = asdict(dep)
+        out["endpoint"] = account.endpoint
+        click.echo(json.dumps(out, indent=2, default=str))
+        return
+    click.echo(
+        f"Created deployment {dep.name} ({dep.model_name} {dep.model_version or ''}) "
+        f"[{dep.provisioning_state or 'unknown'}]"
+    )
+    click.echo(f"Endpoint: {account.endpoint or '-'}")
+
+
 # --- App Service deployments ----------------------------------------------
 
 

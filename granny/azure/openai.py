@@ -8,6 +8,9 @@ from typing import Any
 from granny.azure import _client
 
 _API_VERSION = "2023-05-01"
+# Deployment create/update needs a newer API version than the read path so the
+# GlobalStandard / DataZoneStandard deployment SKUs are accepted.
+_DEPLOY_API_VERSION = "2024-10-01"
 
 
 @dataclass
@@ -93,6 +96,79 @@ def list_all_deployments(
             )
         )
     return deployments
+
+
+def get_account(
+    subscription: str,
+    resource_group: str,
+    account_name: str,
+) -> CognitiveAccount:
+    """Fetch a single Cognitive Services account (incl. its endpoint)."""
+    url = (
+        f"{_client.MANAGEMENT_URL}/subscriptions/{subscription}"
+        f"/resourceGroups/{resource_group}"
+        f"/providers/Microsoft.CognitiveServices/accounts/{account_name}"
+        f"?api-version={_API_VERSION}"
+    )
+    return _parse_account(subscription=subscription, item=_client.get(url))
+
+
+def get_account_keys(
+    subscription: str,
+    resource_group: str,
+    account_name: str,
+) -> dict[str, str]:
+    """Return the account's access keys (``{"key1": ..., "key2": ...}``)."""
+    url = (
+        f"{_client.MANAGEMENT_URL}/subscriptions/{subscription}"
+        f"/resourceGroups/{resource_group}"
+        f"/providers/Microsoft.CognitiveServices/accounts/{account_name}"
+        f"/listKeys?api-version={_API_VERSION}"
+    )
+    keys = _client.post_json(url)
+    return {k: v for k, v in keys.items() if k in ("key1", "key2")}
+
+
+def create_deployment(
+    *,
+    subscription: str,
+    resource_group: str,
+    account_name: str,
+    deployment_name: str,
+    model_name: str,
+    model_version: str | None = None,
+    model_format: str = "OpenAI",
+    sku_name: str = "GlobalStandard",
+    sku_capacity: int = 1,
+) -> CognitiveDeployment:
+    """Create (or update) an Azure OpenAI model deployment via ARM PUT.
+
+    ``deployment_name`` is the name callers request at inference time;
+    ``model_name`` (+ optional ``model_version``) is the underlying model, e.g.
+    ``gpt-4o`` / ``2024-08-06``. ``sku_capacity`` is in thousands of TPM for the
+    standard SKUs. Idempotent: PUT on an existing deployment updates it.
+    """
+    url = (
+        f"{_client.MANAGEMENT_URL}/subscriptions/{subscription}"
+        f"/resourceGroups/{resource_group}"
+        f"/providers/Microsoft.CognitiveServices/accounts/{account_name}"
+        f"/deployments/{deployment_name}"
+        f"?api-version={_DEPLOY_API_VERSION}"
+    )
+    model: dict[str, Any] = {"format": model_format, "name": model_name}
+    if model_version:
+        model["version"] = model_version
+    body = {
+        "sku": {"name": sku_name, "capacity": sku_capacity},
+        "properties": {"model": model},
+    }
+    item = _client.put(url, body)
+    return _parse_deployment(
+        subscription=subscription,
+        resource_group=resource_group,
+        account_name=account_name,
+        item=item,
+    )
 
 
 def _parse_account(subscription: str, item: dict[str, Any]) -> CognitiveAccount:

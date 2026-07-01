@@ -85,6 +85,16 @@ def post(
     return response.status_code
 
 
+def post_json(
+    url: str, body: dict[str, Any] | None = None, *, token: str | None = None
+) -> dict[str, Any]:
+    """POST an ARM action endpoint (e.g. listKeys) and return the JSON body."""
+    response = requests.post(url, headers=headers(token), json=body, timeout=60)
+    if response.status_code not in (200, 201, 202):
+        raise_response_error("POST", url, response)
+    return response.json() if response.content else {}
+
+
 def paginate(url: str, *, token: str | None = None) -> Iterator[dict[str, Any]]:
     """Yield each item from a paginated ARM ``value``/``nextLink`` collection."""
     bearer = token if token is not None else get_management_token()

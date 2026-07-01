@@ -168,6 +168,110 @@ def quota_request(
         click.echo(f"Case ID:    {result.case_id}")
 
 
+@aws.group()
+def bedrock() -> None:
+    """Inspect and enable Amazon Bedrock foundation models."""
+
+
+@bedrock.command("list-models")
+@click.option("--by-provider", default=None, help="Filter by provider, e.g. Anthropic / Meta / Amazon")
+@click.option("--profile", default=None, help="AWS profile name")
+@click.option("--region", default=None, help="AWS region, e.g. eu-central-1")
+@click.option("--json-output", "as_json", is_flag=True, help="Output as JSON")
+def bedrock_list_models(
+    by_provider: str | None,
+    profile: str | None,
+    region: str | None,
+    as_json: bool,
+) -> None:
+    """List Bedrock foundation models available in the region."""
+    from dataclasses import asdict
+
+    from granny.aws.bedrock import list_foundation_models
+
+    with _friendly_errors():
+        rows = list_foundation_models(
+            profile=profile, region=region, by_provider=by_provider
+        )
+    if as_json:
+        click.echo(json.dumps([asdict(r) for r in rows], indent=2, default=str))
+        return
+
+    if not rows:
+        click.echo("No Bedrock foundation models found.")
+        return
+
+    click.echo(f"\n{'Model ID':<52} {'Provider':<16} Streaming")
+    click.echo("-" * 90)
+    for row in rows:
+        streaming = "-" if row.response_streaming is None else ("yes" if row.response_streaming else "no")
+        click.echo(f"{row.model_id:<52} {(row.provider_name or ''):<16} {streaming}")
+
+
+@bedrock.command("enable-model")
+@click.option("--model-id", required=True, help="Foundation model id, e.g. anthropic.claude-3-5-sonnet-20240620-v1:0")
+@click.option("--profile", default=None, help="AWS profile name")
+@click.option("--region", default=None, help="AWS region, e.g. eu-central-1")
+@click.option("--yes", is_flag=True, help="Skip the confirmation prompt")
+@click.option("--dry-run", is_flag=True, help="Show the offer without accepting it")
+@click.option("--json-output", "as_json", is_flag=True, help="Output as JSON")
+def bedrock_enable_model(
+    model_id: str,
+    profile: str | None,
+    region: str | None,
+    yes: bool,
+    dry_run: bool,
+    as_json: bool,
+) -> None:
+    """Enable on-demand access to a Bedrock foundation model by accepting its offer.
+
+    Some providers (e.g. Anthropic) require a use-case form in the console
+    first; that surfaces as an AWS ValidationException here.
+    """
+    from granny.aws.bedrock import create_agreement, list_agreement_offers
+
+    with _friendly_errors():
+        offers = list_agreement_offers(model_id=model_id, profile=profile, region=region)
+
+    if not offers:
+        raise click.ClickException(
+            f"No agreement offers for {model_id} in this region — it may already "
+            "be enabled, unavailable here, or require console enablement."
+        )
+    offer_token = offers[0].get("offerToken")
+    if not offer_token:
+        raise click.ClickException(f"Offer for {model_id} carries no offerToken.")
+
+    if dry_run:
+        payload = {
+            "would_create_agreement": model_id,
+            "offers": len(offers),
+            "offer_token": offer_token,
+        }
+        if as_json:
+            click.echo(json.dumps(payload, indent=2, default=str))
+        else:
+            click.echo(f"Would accept offer for {model_id} ({len(offers)} offer(s) available)")
+        return
+
+    if not yes and not click.confirm(
+        f"Accept the agreement offer to enable {model_id!r}?"
+    ):
+        click.echo("Aborted.")
+        return
+
+    from dataclasses import asdict
+
+    with _friendly_errors():
+        result = create_agreement(
+            model_id=model_id, offer_token=offer_token, profile=profile, region=region
+        )
+    if as_json:
+        click.echo(json.dumps(asdict(result), indent=2, default=str))
+        return
+    click.echo(f"Enabled {result.model_id} ({result.status}).")
+
+
 @quota.command("status")
 @click.argument("quota_ref", default="gpu")
 @click.option("--service-code", default=None, help="Override service code (default: ec2)")
