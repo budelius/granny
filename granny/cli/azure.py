@@ -518,6 +518,100 @@ def openai_deployment_create(
     click.echo(f"Endpoint: {account.endpoint or '-'}")
 
 
+@openai.group("account")
+def openai_account() -> None:
+    """Create Azure OpenAI (Cognitive Services) accounts."""
+
+
+@openai_account.command("create")
+@click.option("--subscription", required=True, help="Azure subscription ID")
+@click.option("--resource-group", required=True, help="Resource group (create first if needed)")
+@click.option("--name", "account_name", required=True, help="Account name")
+@click.option("--location", required=True, help="Region, e.g. swedencentral / eastus2")
+@click.option("--custom-subdomain", default=None, help="Globally-unique subdomain (default: name)")
+@click.option("--sku", "sku_name", default="S0", show_default=True)
+@click.option("--dry-run", is_flag=True, help="Show the action without running it")
+@click.option("--json-output", "as_json", is_flag=True, help="Output as JSON")
+@_clean_errors
+def openai_account_create(
+    subscription: str,
+    resource_group: str,
+    account_name: str,
+    location: str,
+    custom_subdomain: str | None,
+    sku_name: str,
+    dry_run: bool,
+    as_json: bool,
+) -> None:
+    """Create an Azure OpenAI account. Async — poll `openai accounts` for Succeeded."""
+    from dataclasses import asdict
+
+    from granny.azure.openai import create_account
+
+    if dry_run:
+        payload = {
+            "would_create_account": account_name,
+            "resource_group": resource_group,
+            "location": location,
+            "kind": "OpenAI",
+            "sku": sku_name,
+        }
+        click.echo(json.dumps(payload, indent=2) if as_json else
+                   f"Would create OpenAI account {account_name!r} in {location} ({resource_group})")
+        return
+
+    acct = create_account(
+        subscription=subscription,
+        resource_group=resource_group,
+        account_name=account_name,
+        location=location,
+        custom_subdomain=custom_subdomain,
+        sku_name=sku_name,
+    )
+    if as_json:
+        click.echo(json.dumps(asdict(acct), indent=2, default=str))
+        return
+    click.echo(f"Create accepted for {acct.name} [{acct.provisioning_state or 'Accepted'}]")
+    click.echo(f"Endpoint: {acct.endpoint or '(pending — poll `openai accounts`)'}")
+
+
+@azure.group("group")
+def group() -> None:
+    """Manage resource groups."""
+
+
+@group.command("create")
+@click.option("--subscription", required=True, help="Azure subscription ID")
+@click.option("--name", required=True, help="Resource group name")
+@click.option("--location", required=True, help="Region, e.g. swedencentral")
+@click.option("--dry-run", is_flag=True, help="Show the action without running it")
+@click.option("--json-output", "as_json", is_flag=True, help="Output as JSON")
+@_clean_errors
+def group_create(
+    subscription: str,
+    name: str,
+    location: str,
+    dry_run: bool,
+    as_json: bool,
+) -> None:
+    """Create (or update) a resource group. Idempotent."""
+    from dataclasses import asdict
+
+    from granny.azure.resourcegroup import create_resource_group
+
+    if dry_run:
+        payload = {"would_create_group": name, "location": location}
+        click.echo(json.dumps(payload, indent=2) if as_json else
+                   f"Would create resource group {name!r} in {location}")
+        return
+
+    rg = create_resource_group(subscription=subscription, name=name, location=location)
+    if as_json:
+        click.echo(json.dumps(asdict(rg), indent=2, default=str))
+        return
+    click.echo(f"Resource group {rg.name} [{rg.provisioning_state or 'Succeeded'}] in {rg.location}")
+
+
 # --- App Service deployments ----------------------------------------------
 
 

@@ -22,6 +22,7 @@ class CognitiveAccount:
     sku: str | None
     location: str | None
     endpoint: str | None
+    provisioning_state: str | None
     id: str
     raw: dict[str, Any]
 
@@ -129,6 +130,41 @@ def get_account_keys(
     return {k: v for k, v in keys.items() if k in ("key1", "key2")}
 
 
+def create_account(
+    *,
+    subscription: str,
+    resource_group: str,
+    account_name: str,
+    location: str,
+    custom_subdomain: str | None = None,
+    sku_name: str = "S0",
+) -> CognitiveAccount:
+    """Create (or update) an Azure OpenAI (Cognitive Services) account via ARM PUT.
+
+    ``custom_subdomain`` must be globally unique (it becomes the ``*.openai.azure.com``
+    host); defaults to ``account_name``. The create is async — the returned account
+    may show provisioningState ``Accepted``/``Creating``; poll :func:`get_account`
+    until ``Succeeded`` before creating deployments.
+    """
+    url = (
+        f"{_client.MANAGEMENT_URL}/subscriptions/{subscription}"
+        f"/resourceGroups/{resource_group}"
+        f"/providers/Microsoft.CognitiveServices/accounts/{account_name}"
+        f"?api-version={_API_VERSION}"
+    )
+    body = {
+        "location": location,
+        "kind": "OpenAI",
+        "sku": {"name": sku_name},
+        "properties": {
+            "customSubDomainName": custom_subdomain or account_name,
+            "publicNetworkAccess": "Enabled",
+        },
+    }
+    item = _client.put(url, body)
+    return _parse_account(subscription=subscription, item=item)
+
+
 def create_deployment(
     *,
     subscription: str,
@@ -183,6 +219,7 @@ def _parse_account(subscription: str, item: dict[str, Any]) -> CognitiveAccount:
         sku=sku.get("name") if isinstance(sku, dict) else None,
         location=item.get("location"),
         endpoint=properties.get("endpoint"),
+        provisioning_state=properties.get("provisioningState"),
         id=resource_id,
         raw=item,
     )
