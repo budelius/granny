@@ -377,18 +377,47 @@ def openai_accounts(subscription: str, as_json: bool) -> None:
     default=None,
     help="Filter accounts by kind, e.g. OpenAI / FormRecognizer / SpeechServices",
 )
+@click.option("--with-usage", "with_usage", is_flag=True,
+              help="Also fetch last-used (Azure Monitor ModelRequests; extra API calls)")
+@click.option("--usage-days", "usage_days", default=90, show_default=True, type=int,
+              help="Look-back window for last-used (max ~93 days platform retention)")
 @click.option("--json-output", "as_json", is_flag=True, help="Output as JSON")
+@_clean_errors
 def openai_deployments(
     subscription: str,
     kind: str | None,
+    with_usage: bool,
+    usage_days: int,
     as_json: bool,
 ) -> None:
-    """List model deployments across every Cognitive Services account."""
+    """List model deployments across every Cognitive Services account.
+
+    Always includes ``created_at`` (from ARM systemData). With ``--with-usage``,
+    also fills ``last_used`` from Azure Monitor (last day the deployment served a
+    request within ``--usage-days``; null = idle in the window).
+    """
     from dataclasses import asdict
 
-    from granny.azure.openai import list_all_deployments
+    from granny.azure.openai import account_deployment_usage, list_all_deployments
 
     rows = list_all_deployments(subscription=subscription, kind_filter=kind)
+
+    if with_usage:
+        # One Monitor query per (resource_group, account); attach last_used.
+        cache: dict[tuple[str, str], dict[str, str | None]] = {}
+        for row in rows:
+            if not row.resource_group:
+                continue
+            key = (row.resource_group, row.account_name)
+            if key not in cache:
+                cache[key] = account_deployment_usage(
+                    subscription=subscription,
+                    resource_group=row.resource_group,
+                    account_name=row.account_name,
+                    days=usage_days,
+                )
+            row.last_used = cache[key].get(row.name)
+
     if as_json:
         click.echo(json.dumps([asdict(r) for r in rows], indent=2, default=str))
         return
@@ -397,17 +426,21 @@ def openai_deployments(
         click.echo("No Cognitive Services model deployments found.")
         return
 
+    def _short(ts: str | None) -> str:
+        return (ts or "-")[:10]  # YYYY-MM-DD
+
     click.echo(
-        f"\n{'Account':<28} {'Deployment':<28} {'Model':<28} "
-        f"{'Version':<10} {'SKU':<14} Capacity"
+        f"\n{'Account':<26} {'Deployment':<20} {'Model':<20} "
+        f"{'Created':<12} {'Last used':<12} SKU(cap)"
     )
-    click.echo("-" * 130)
+    click.echo("-" * 110)
     for row in rows:
-        capacity = "-" if row.sku_capacity is None else str(row.sku_capacity)
+        cap = "-" if row.sku_capacity is None else str(row.sku_capacity)
+        last = _short(row.last_used) if with_usage else "(--with-usage)"
         click.echo(
-            f"{row.account_name:<28} {row.name:<28} "
-            f"{(row.model_name or ''):<28} {(row.model_version or ''):<10} "
-            f"{(row.sku or ''):<14} {capacity}"
+            f"{row.account_name:<26} {row.name:<20} "
+            f"{(row.model_name or ''):<20} {_short(row.created_at):<12} {last:<12} "
+            f"{(row.sku or '')}({cap})"
         )
 
 

@@ -68,6 +68,52 @@ class TestCreateDeployment:
         assert "version" not in captured["body"]["properties"]["model"]
 
 
+class TestDeploymentUsage:
+    def test_created_at_parsed_from_systemdata(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        item = {
+            "name": "gpt-5.4",
+            "systemData": {"createdAt": "2026-07-02T10:00:00Z"},
+            "sku": {"name": "GlobalStandard", "capacity": 50},
+            "properties": {"model": {"name": "gpt-5.4"}, "provisioningState": "Succeeded"},
+        }
+        dep = openai_mod._parse_deployment(
+            subscription="s", resource_group="rg", account_name="a", item=item
+        )
+        assert dep.created_at == "2026-07-02T10:00:00Z"
+        assert dep.last_used is None
+
+    def test_account_deployment_usage_last_nonzero(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        payload = {
+            "value": [
+                {
+                    "timeseries": [
+                        {
+                            "metadatavalues": [
+                                {"name": {"value": "ModelDeploymentName"}, "value": "gpt-5.4"}
+                            ],
+                            "data": [
+                                {"timeStamp": "2026-06-30T00:00:00Z", "total": 0},
+                                {"timeStamp": "2026-07-01T00:00:00Z", "total": 12},
+                                {"timeStamp": "2026-07-02T00:00:00Z", "total": 0},
+                            ],
+                        },
+                        {
+                            "metadatavalues": [
+                                {"name": {"value": "ModelDeploymentName"}, "value": "gpt-5-nano"}
+                            ],
+                            "data": [{"timeStamp": "2026-07-02T00:00:00Z", "total": 0}],
+                        },
+                    ]
+                }
+            ]
+        }
+        monkeypatch.setattr(openai_mod._client, "get", lambda url, **k: payload)
+        usage = openai_mod.account_deployment_usage("s", "rg", "acct", days=30)
+        # last day with total>0 wins; idle deployment → None
+        assert usage["gpt-5.4"] == "2026-07-01T00:00:00Z"
+        assert usage["gpt-5-nano"] is None
+
+
 class TestAccountKeys:
     def test_filters_to_key1_key2(self, monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setattr(

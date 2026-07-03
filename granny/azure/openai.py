@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from granny.azure import _client
@@ -38,6 +39,8 @@ class CognitiveDeployment:
     sku: str | None
     sku_capacity: int | None
     provisioning_state: str | None
+    created_at: str | None
+    last_used: str | None
     id: str
     raw: dict[str, Any]
 
@@ -97,6 +100,51 @@ def list_all_deployments(
             )
         )
     return deployments
+
+
+def account_deployment_usage(
+    subscription: str,
+    resource_group: str,
+    account_name: str,
+    days: int = 90,
+) -> dict[str, str | None]:
+    """Return ``{deployment_name: last_used_iso}`` from Azure Monitor.
+
+    Uses the ``ModelRequests`` metric (Total, daily, split by
+    ``ModelDeploymentName``) over the last ``days`` (platform-metric retention
+    is ~93 days). ``None`` means no requests in the window. Requires
+    ``Microsoft.Insights/metrics/read`` on the account.
+    """
+    end = datetime.now(timezone.utc)
+    start = end - timedelta(days=days)
+    fmt = "%Y-%m-%dT%H:%M:%SZ"
+    rid = (
+        f"/subscriptions/{subscription}/resourceGroups/{resource_group}"
+        f"/providers/Microsoft.CognitiveServices/accounts/{account_name}"
+    )
+    url = (
+        f"{_client.MANAGEMENT_URL}{rid}/providers/microsoft.insights/metrics"
+        f"?api-version=2019-07-01&metricnames=ModelRequests&aggregation=Total"
+        f"&interval=P1D&timespan={start.strftime(fmt)}/{end.strftime(fmt)}"
+        f"&$filter=ModelDeploymentName eq '*'"
+    )
+    data = _client.get(url)
+    out: dict[str, str | None] = {}
+    for metric in data.get("value", []):
+        for ts in metric.get("timeseries", []):
+            dep = None
+            for md in ts.get("metadatavalues", []):
+                mn = md.get("name", {})
+                if (mn.get("value") if isinstance(mn, dict) else mn) == "ModelDeploymentName":
+                    dep = md.get("value")
+            if dep is None:
+                continue
+            last = None
+            for pt in ts.get("data", []):
+                if pt.get("total"):
+                    last = pt.get("timeStamp")
+            out[dep] = last
+    return out
 
 
 def get_account(
@@ -234,6 +282,7 @@ def _parse_deployment(
     properties = item.get("properties", {}) if isinstance(item, dict) else {}
     model = properties.get("model", {}) if isinstance(properties, dict) else {}
     sku = item.get("sku", {}) if isinstance(item, dict) else {}
+    system = item.get("systemData", {}) if isinstance(item, dict) else {}
     return CognitiveDeployment(
         subscription=subscription,
         resource_group=resource_group,
@@ -244,6 +293,8 @@ def _parse_deployment(
         sku=sku.get("name") if isinstance(sku, dict) else None,
         sku_capacity=sku.get("capacity") if isinstance(sku, dict) else None,
         provisioning_state=properties.get("provisioningState"),
+        created_at=system.get("createdAt") if isinstance(system, dict) else None,
+        last_used=None,  # filled in on demand via account_deployment_usage()
         id=item.get("id", ""),
         raw=item,
     )
