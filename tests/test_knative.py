@@ -10,10 +10,12 @@ no "obf_" prefix) — see 18-03-SUMMARY deviation #3.
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, call, patch
 
 import pytest
+from click.testing import CliRunner
 
+from granny.cli.knative import knative
 from granny.knative import KnativeClient
 
 
@@ -437,3 +439,258 @@ class TestInvoke:
             )
             with pytest.raises(RuntimeError, match="404"):
                 c.invoke("my-fn")
+
+
+# ---------------------------------------------------------------------------
+# TestCLI — Click command group via CliRunner (no live infra)
+# ---------------------------------------------------------------------------
+
+_CLI_ARGS_BASE = [
+    "--api-url", "https://faas-api.test.example",
+    "--api-key", "test-fake-key-value",
+]
+
+
+def _mock_client(deploy_ret=None, list_ret=None, get_ret=None, scale_ret=None):
+    """Return a pre-configured mock KnativeClient instance."""
+    m = MagicMock()
+    m.deploy.return_value = deploy_ret or {"status": {"url": "https://fn.example.com"}}
+    m.list.return_value = list_ret if list_ret is not None else []
+    m.get.return_value = get_ret
+    m.scale.return_value = scale_ret or {"scaled": True}
+    return m
+
+
+class TestCLI:
+    def _run(self, args: list[str]):
+        return CliRunner().invoke(knative, args)
+
+    # -- deploy ---------------------------------------------------------------
+
+    def test_deploy_command_calls_client(self) -> None:
+        mock_instance = _mock_client()
+        with patch("granny.knative.KnativeClient", return_value=mock_instance) as mock_cls:
+            result = self._run(
+                ["deploy", "my-fn", "--image", "img:tag"] + _CLI_ARGS_BASE
+            )
+        assert result.exit_code == 0, result.output
+        mock_cls.assert_called_once_with(
+            base_url="https://faas-api.test.example",
+            api_key="test-fake-key-value",
+        )
+        mock_instance.deploy.assert_called_once()
+        assert "Deployed: my-fn" in result.output
+
+    def test_deploy_command_env_parsing(self) -> None:
+        mock_instance = _mock_client()
+        with patch("granny.knative.KnativeClient", return_value=mock_instance):
+            result = self._run(
+                [
+                    "deploy", "my-fn", "--image", "img:tag",
+                    "--env", "FOO=bar", "--env", "BAZ=qux",
+                ]
+                + _CLI_ARGS_BASE
+            )
+        assert result.exit_code == 0, result.output
+        call_kwargs = mock_instance.deploy.call_args
+        env_vars = call_kwargs.kwargs.get("env_vars", call_kwargs[1].get("env_vars"))
+        assert env_vars == {"FOO": "bar", "BAZ": "qux"}
+
+    # -- list -----------------------------------------------------------------
+
+    def test_list_command_prints_table(self) -> None:
+        items = [{"metadata": {"name": "fn1"}, "status": {"url": "https://fn1.example.com"}}]
+        mock_instance = _mock_client(list_ret=items)
+        with patch("granny.knative.KnativeClient", return_value=mock_instance):
+            result = self._run(["list"] + _CLI_ARGS_BASE)
+        assert result.exit_code == 0, result.output
+        assert "fn1" in result.output
+        assert "https://fn1.example.com" in result.output
+
+    def test_list_command_empty(self) -> None:
+        mock_instance = _mock_client(list_ret=[])
+        with patch("granny.knative.KnativeClient", return_value=mock_instance):
+            result = self._run(["list"] + _CLI_ARGS_BASE)
+        assert result.exit_code == 0, result.output
+        assert "No functions deployed." in result.output
+
+    # -- get ------------------------------------------------------------------
+
+    def test_get_command_found(self) -> None:
+        fn_dict = {"metadata": {"name": "my-fn"}, "status": {"url": "https://fn.example.com"}}
+        mock_instance = _mock_client(get_ret=fn_dict)
+        with patch("granny.knative.KnativeClient", return_value=mock_instance):
+            result = self._run(["get", "my-fn"] + _CLI_ARGS_BASE)
+        assert result.exit_code == 0, result.output
+        assert "my-fn" in result.output
+
+    def test_get_command_not_found(self) -> None:
+        mock_instance = _mock_client(get_ret=None)
+        with patch("granny.knative.KnativeClient", return_value=mock_instance):
+            result = self._run(["get", "my-fn"] + _CLI_ARGS_BASE)
+        assert result.exit_code != 0
+        assert "not found" in result.output.lower() or "not found" in (result.output + (result.stderr or "")).lower()
+
+    # -- scale ----------------------------------------------------------------
+
+    def test_scale_command(self) -> None:
+        mock_instance = _mock_client()
+        with patch("granny.knative.KnativeClient", return_value=mock_instance):
+            result = self._run(
+                ["scale", "my-fn", "--min-scale", "1", "--max-scale", "10"] + _CLI_ARGS_BASE
+            )
+        assert result.exit_code == 0, result.output
+        mock_instance.scale.assert_called_once_with("my-fn", min_scale=1, max_scale=10)
+
+    def test_scale_requires_at_least_one_option(self) -> None:
+        mock_instance = _mock_client()
+        with patch("granny.knative.KnativeClient", return_value=mock_instance):
+            result = self._run(["scale", "my-fn"] + _CLI_ARGS_BASE)
+        assert result.exit_code != 0
+
+    # -- remove ---------------------------------------------------------------
+
+    def test_remove_requires_yes_flag(self) -> None:
+        mock_instance = _mock_client()
+        with patch("granny.knative.KnativeClient", return_value=mock_instance):
+            result = self._run(["remove", "my-fn"] + _CLI_ARGS_BASE)
+        assert result.exit_code != 0
+        mock_instance.delete.assert_not_called()
+
+    def test_remove_calls_delete(self) -> None:
+        mock_instance = _mock_client()
+        with patch("granny.knative.KnativeClient", return_value=mock_instance):
+            result = self._run(["remove", "my-fn", "--yes"] + _CLI_ARGS_BASE)
+        assert result.exit_code == 0, result.output
+        mock_instance.delete.assert_called_once_with("my-fn")
+        assert "Removed: my-fn" in result.output
+
+    # -- logs -----------------------------------------------------------------
+
+    def test_logs_command(self) -> None:
+        mock_instance = _mock_client()
+        mock_instance.logs.return_value = "line1\nline2"
+        with patch("granny.knative.KnativeClient", return_value=mock_instance):
+            result = self._run(["logs", "my-fn"] + _CLI_ARGS_BASE)
+        assert result.exit_code == 0, result.output
+        assert "line1" in result.output
+        assert "line2" in result.output
+
+    # -- invoke ---------------------------------------------------------------
+
+    def test_invoke_command(self) -> None:
+        mock_instance = _mock_client()
+        mock_instance.invoke.return_value = b"hello"
+        with patch("granny.knative.KnativeClient", return_value=mock_instance):
+            result = self._run(["invoke", "my-fn"] + _CLI_ARGS_BASE)
+        assert result.exit_code == 0, result.output
+        assert "hello" in result.output
+
+
+# ---------------------------------------------------------------------------
+# TestDeployUi — deploy-ui command (upload + CDN purge + backend deploy)
+# ---------------------------------------------------------------------------
+
+
+class TestDeployUi:
+    """Tests for 'granny knative deploy-ui'."""
+
+    def _run(self, args: list[str]):
+        return CliRunner().invoke(knative, args)
+
+    def _dist_args(self, dist_dir: str) -> list[str]:
+        return [
+            "deploy-ui", "my-fn", dist_dir,
+            "--image", "img:tag",
+            "--zone", "my-zone",
+            "--storage-password", "fake-storage-pw",
+        ] + _CLI_ARGS_BASE
+
+    def test_upload_dist_calls_upload_file_per_file(self, tmp_path) -> None:
+        (tmp_path / "index.html").write_text("<html></html>")
+        (tmp_path / "main.js").write_text("console.log('hi')")
+
+        with patch("granny.storage.bunny.BunnyStorageClient") as mock_storage_cls, \
+             patch("granny.knative.KnativeClient") as mock_knative_cls:
+            mock_storage_cls.return_value.upload_file.return_value = None
+            mock_knative_cls.return_value.deploy.return_value = {
+                "status": {"url": "https://fn.example.com"}
+            }
+            result = self._run(self._dist_args(str(tmp_path)))
+
+        assert result.exit_code == 0, result.output
+        assert mock_storage_cls.return_value.upload_file.call_count == 2
+
+    def test_deploy_ui_html_cache_control(self, tmp_path) -> None:
+        (tmp_path / "index.html").write_text("<html></html>")
+
+        with patch("granny.storage.bunny.BunnyStorageClient") as mock_storage_cls, \
+             patch("granny.knative.KnativeClient") as mock_knative_cls:
+            mock_storage_cls.return_value.upload_file.return_value = None
+            mock_knative_cls.return_value.deploy.return_value = {}
+            self._run(self._dist_args(str(tmp_path)))
+
+        calls = mock_storage_cls.return_value.upload_file.call_args_list
+        assert len(calls) == 1
+        # cache_control is the 7th positional arg (index 6) or 'cache_control' kwarg
+        cc = calls[0].kwargs.get("cache_control") or calls[0].args[6]
+        assert cc == "no-cache, no-store, must-revalidate"
+
+    def test_deploy_ui_asset_cache_control(self, tmp_path) -> None:
+        (tmp_path / "main.js").write_text("// js")
+
+        with patch("granny.storage.bunny.BunnyStorageClient") as mock_storage_cls, \
+             patch("granny.knative.KnativeClient") as mock_knative_cls:
+            mock_storage_cls.return_value.upload_file.return_value = None
+            mock_knative_cls.return_value.deploy.return_value = {}
+            self._run(self._dist_args(str(tmp_path)))
+
+        calls = mock_storage_cls.return_value.upload_file.call_args_list
+        assert len(calls) == 1
+        cc = calls[0].kwargs.get("cache_control") or calls[0].args[6]
+        assert cc == "public, max-age=31536000, immutable"
+
+    def test_deploy_ui_calls_knative_deploy(self, tmp_path) -> None:
+        (tmp_path / "index.html").write_text("<html></html>")
+
+        with patch("granny.storage.bunny.BunnyStorageClient") as mock_storage_cls, \
+             patch("granny.knative.KnativeClient") as mock_knative_cls:
+            mock_storage_cls.return_value.upload_file.return_value = None
+            mock_knative_cls.return_value.deploy.return_value = {
+                "status": {"url": "https://fn.example.com"}
+            }
+            result = self._run(self._dist_args(str(tmp_path)))
+
+        assert result.exit_code == 0, result.output
+        mock_knative_cls.return_value.deploy.assert_called_once()
+        deploy_call = mock_knative_cls.return_value.deploy.call_args
+        assert deploy_call.args[0] == "my-fn"
+        assert deploy_call.args[1] == "img:tag"
+
+    def test_deploy_ui_purges_cdn_when_pull_zone_id_given(self, tmp_path) -> None:
+        (tmp_path / "index.html").write_text("<html></html>")
+
+        with patch("granny.storage.bunny.BunnyStorageClient") as mock_storage_cls, \
+             patch("granny.cdn.bunny.BunnyCDNClient") as mock_cdn_cls, \
+             patch("granny.knative.KnativeClient") as mock_knative_cls:
+            mock_storage_cls.return_value.upload_file.return_value = None
+            mock_cdn_cls.return_value.purge_cache.return_value = None
+            mock_knative_cls.return_value.deploy.return_value = {}
+            result = self._run(self._dist_args(str(tmp_path)) + ["--pull-zone-id", "42"])
+
+        assert result.exit_code == 0, result.output
+        mock_cdn_cls.return_value.purge_cache.assert_called_once_with(42)
+
+    def test_deploy_ui_skips_cdn_purge_when_no_pull_zone_id(self, tmp_path) -> None:
+        (tmp_path / "index.html").write_text("<html></html>")
+
+        with patch("granny.storage.bunny.BunnyStorageClient") as mock_storage_cls, \
+             patch("granny.cdn.bunny.BunnyCDNClient") as mock_cdn_cls, \
+             patch("granny.knative.KnativeClient") as mock_knative_cls:
+            mock_storage_cls.return_value.upload_file.return_value = None
+            mock_cdn_cls.return_value.purge_cache.return_value = None
+            mock_knative_cls.return_value.deploy.return_value = {}
+            result = self._run(self._dist_args(str(tmp_path)))
+
+        assert result.exit_code == 0, result.output
+        mock_cdn_cls.return_value.purge_cache.assert_not_called()
