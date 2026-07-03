@@ -137,6 +137,7 @@ def _invalidate_vault_session() -> None:
     except Exception:
         pass
 
+
 # Map env var name -> vault secret name (kebab-case).
 # The full vault path is: {VAULT_FOLDER}/{secret_name}
 VAULT_FOLDER = "granny/infra"
@@ -188,6 +189,12 @@ SECRET_MAP: dict[str, str] = {
     # StalwartClient.from_environment() and is overridable via STALWART_URL.
     "STALWART_ADMIN_USER": "stalwart-admin-user",
     "STALWART_ADMIN_PASSWORD": "stalwart-admin-password",
+    # obachan FaaS control API (`granny knative` / `granny faas` commands).
+    # OBACHAN_API_BASE_URL is not secret per-se but is vault-distributed so
+    # the same URL configuration propagates to all developer machines without
+    # manual .env updates (research OQ3).
+    "OBACHAN_API_KEY": "obachan-api-key",  # vault: granny/infra/obachan-api-key
+    "OBACHAN_API_BASE_URL": "obachan-api-base-url",  # vault: granny/infra/obachan-api-base-url
 }
 
 # Module-level cache so vault is only contacted once per process
@@ -231,7 +238,10 @@ def _get_vault_client():
                 logger.info("Reusing cached vault session")
                 return _vault_client
             else:
-                logger.debug("Cached vault token expired (HTTP %s), re-authenticating", resp.status_code)
+                logger.debug(
+                    "Cached vault token expired (HTTP %s), re-authenticating",
+                    resp.status_code,
+                )
                 _invalidate_vault_session()
                 _vault_client = None
         except Exception as exc:
