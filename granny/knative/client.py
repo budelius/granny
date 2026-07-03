@@ -59,9 +59,9 @@ class KnativeClient:
         base_url: str | None = None,
         api_key: str | None = None,
     ) -> None:
-        self.base_url = (
-            base_url or get_secret("OBACHAN_API_BASE_URL") or ""
-        ).rstrip("/")
+        self.base_url = (base_url or get_secret("OBACHAN_API_BASE_URL") or "").rstrip(
+            "/"
+        )
         api_key = api_key or get_secret("OBACHAN_API_KEY")
 
         if not self.base_url:
@@ -282,9 +282,7 @@ class KnativeClient:
         url = f"{self.base_url}/api/faas/functions/{name}/logs"
         resp = self._session.get(url, params={"tail": tail}, timeout=30)
         if resp.status_code >= 400:
-            raise RuntimeError(
-                f"FaaS API logs {name}: {resp.status_code} {resp.text}"
-            )
+            raise RuntimeError(f"FaaS API logs {name}: {resp.status_code} {resp.text}")
         return resp.text
 
     def invoke(
