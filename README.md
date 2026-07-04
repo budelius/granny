@@ -124,6 +124,10 @@ granny storage aws create my-website --website
 granny analyze vpcs --json-output
 granny analyze lambdas --region us-east-1 eu-west-1
 
+# AWS Bedrock -- foundation models (read-only; on-demand access auto-enables on first invoke)
+granny aws bedrock list-models --profile lularge --region eu-central-1 --by-provider Anthropic
+granny aws bedrock check-access --model-id anthropic.claude-sonnet-4-20250514-v1:0 --profile lularge --region eu-central-1
+
 # Cross-cloud GPU / credit / cost inventory (AWS + GCP + Azure)
 granny analyze gpus                                # running GPUs everywhere
 granny analyze gpus --filter h100,h200             # find Hopper clusters
@@ -196,8 +200,15 @@ granny elk add-user user@example.com \
 granny azure account whoami                                  # signed-in identity
 granny azure account list                                    # subscriptions
 granny azure deployment list --subscription <id> --all-groups
+granny azure group create --subscription <id> --name <rg> --location swedencentral
 granny azure openai accounts --subscription <id>
-granny azure openai deployments --subscription <id> --kind OpenAI
+granny azure openai account create --subscription <id> --resource-group <rg> \
+    --name <acct> --location swedencentral                   # create an Azure OpenAI account
+granny azure openai keys --subscription <id> --resource-group <rg> --account <acct>
+granny azure openai deployments --subscription <id> --kind OpenAI --with-usage  # + created_at & last-used (Azure Monitor)
+granny azure openai deployment create --subscription <id> --resource-group <rg> \
+    --account <acct> --name gpt-5.4 --model gpt-5.4 --model-version 2026-03-05 \
+    --sku GlobalStandard --capacity 50                       # create a model deployment
 granny azure webapp list --subscription <id>
 granny azure vm-sizes list --subscription <id> --location polandcentral
 granny azure vm list --subscription <id>                      # running VMs + power state
