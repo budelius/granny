@@ -262,6 +262,53 @@ class ZitadelClient:
             "POST", f"/management/v1/projects/{project_id}/apps/oidc", body=body
         )
 
+    def set_oidc_app_redirects(
+        self,
+        project_id: str,
+        app_id: str,
+        redirect_uris: list[str],
+        *,
+        replace: bool = False,
+        post_logout_uris: list[str] | None = None,
+    ) -> dict[str, Any]:
+        """Set an existing OIDC app's redirect URIs (idempotent).
+
+        Reads the app's current ``oidcConfig`` and PUTs it back with the merged
+        redirect URIs (Zitadel's update endpoint replaces the whole config, so
+        every field is round-tripped). With ``replace=False`` (default) the new
+        URIs are unioned with the existing set — order-stable, de-duplicated —
+        so re-running with the same URIs is a no-op. ``replace=True`` sets
+        exactly ``redirect_uris``.
+        """
+        oidc = dict(self.get_app(project_id, app_id).get("oidcConfig") or {})
+        existing = list(oidc.get("redirectUris") or [])
+        merged = (
+            list(dict.fromkeys(redirect_uris))
+            if replace
+            else list(dict.fromkeys([*existing, *redirect_uris]))
+        )
+        merged_logout = list(
+            dict.fromkeys([*(oidc.get("postLogoutRedirectUris") or []), *(post_logout_uris or [])])
+        )
+        body = {
+            "redirectUris": merged,
+            "responseTypes": oidc.get("responseTypes") or ["OIDC_RESPONSE_TYPE_CODE"],
+            "grantTypes": oidc.get("grantTypes")
+            or ["OIDC_GRANT_TYPE_AUTHORIZATION_CODE", "OIDC_GRANT_TYPE_REFRESH_TOKEN"],
+            "appType": oidc.get("appType") or "OIDC_APP_TYPE_WEB",
+            "authMethodType": oidc.get("authMethodType") or "OIDC_AUTH_METHOD_TYPE_BASIC",
+            "postLogoutRedirectUris": merged_logout,
+            "version": oidc.get("version") or "OIDC_VERSION_1_0",
+            "devMode": oidc.get("devMode", False),
+            "accessTokenType": oidc.get("accessTokenType") or "OIDC_TOKEN_TYPE_JWT",
+        }
+        self.request(
+            "PUT",
+            f"/management/v1/projects/{project_id}/apps/{app_id}/oidc_config",
+            body=body,
+        )
+        return {"appId": app_id, "redirectUris": merged}
+
     # ── Login policy / MFA ───────────────────────────────────────────────
 
     def get_login_policy(self) -> dict[str, Any]:

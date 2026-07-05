@@ -83,6 +83,61 @@ class TestProjectsAndApps:
             assert body["authMethodType"] == "OIDC_AUTH_METHOD_TYPE_BASIC"
             assert out["clientSecret"] == "sec"
 
+    def test_set_oidc_app_redirects_merges_and_roundtrips_config(self):
+        c = _client()
+        calls: list[tuple[str, str, dict]] = []
+
+        def fake_request(method, path, *, body=None, params=None):
+            calls.append((method, path, body or {}))
+            if method == "GET":
+                return {
+                    "app": {
+                        "id": "a1",
+                        "oidcConfig": {
+                            "redirectUris": ["https://old.example/oauth2/callback"],
+                            "appType": "OIDC_APP_TYPE_WEB",
+                            "authMethodType": "OIDC_AUTH_METHOD_TYPE_BASIC",
+                            "devMode": True,
+                        },
+                    }
+                }
+            return {}
+
+        with patch.object(c, "request", side_effect=fake_request):
+            out = c.set_oidc_app_redirects(
+                "p1",
+                "a1",
+                ["https://dash.pseekoo.io/oauth2/callback", "https://old.example/oauth2/callback"],
+            )
+        put = next(b for m, p, b in calls if m == "PUT")
+        # existing URI preserved, new one appended, de-duplicated, order-stable
+        assert put["redirectUris"] == [
+            "https://old.example/oauth2/callback",
+            "https://dash.pseekoo.io/oauth2/callback",
+        ]
+        # round-tripped config fields survive the update
+        assert put["devMode"] is True
+        assert put["appType"] == "OIDC_APP_TYPE_WEB"
+        assert out["appId"] == "a1"
+
+    def test_set_oidc_app_redirects_replace_sets_exact(self):
+        c = _client()
+
+        def fake_request(method, path, *, body=None, params=None):
+            if method == "GET":
+                return {"app": {"oidcConfig": {"redirectUris": ["https://old/x"]}}}
+            return {}
+
+        captured: dict = {}
+        with patch.object(c, "request", side_effect=fake_request) as req:
+            c.set_oidc_app_redirects("p", "a", ["https://new/y"], replace=True)
+            captured = next(
+                call.kwargs["body"]
+                for call in req.call_args_list
+                if call.args[0] == "PUT"
+            )
+        assert captured["redirectUris"] == ["https://new/y"]
+
     def test_enforce_mfa_sets_force_and_factors(self):
         c = _client()
         calls: list[tuple[str, str]] = []

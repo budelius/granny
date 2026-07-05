@@ -128,6 +128,68 @@ def create_oidc_app_cmd(
     )
 
 
+@zitadel.command("set-redirect-uris")
+@click.option("--project", required=True, help="Project name or id owning the app.")
+@click.option("--app", "app_name", required=True, help="OIDC app name.")
+@click.option(
+    "--redirect-uri",
+    "redirect_uris",
+    multiple=True,
+    required=True,
+    help="Allowed OIDC redirect URI (repeatable).",
+)
+@click.option(
+    "--post-logout-uri",
+    "post_logout_uris",
+    multiple=True,
+    help="Post-logout redirect URI to add (repeatable).",
+)
+@click.option(
+    "--replace",
+    is_flag=True,
+    help="Replace the redirect-URI set instead of merging with the existing one.",
+)
+@click.option("--dry-run", is_flag=True)
+def set_redirect_uris_cmd(
+    project: str,
+    app_name: str,
+    redirect_uris: tuple[str, ...],
+    post_logout_uris: tuple[str, ...],
+    replace: bool,
+    dry_run: bool,
+) -> None:
+    """Set an existing OIDC app's allowed redirect URIs (idempotent).
+
+    Merges with the app's current redirect URIs by default (union, de-duped),
+    so re-running with the same set is a no-op. Use ``--replace`` to set exactly
+    the URIs given.
+    """
+    client = _client()
+    found = client.find_project(project)
+    project_id = found["id"] if found else project
+    app = client.find_oidc_app(project_id, app_name)
+    if not app:
+        raise click.ClickException(
+            f"OIDC app {app_name!r} not found in project {project!r}"
+        )
+    app_id = app.get("id")
+    if dry_run:
+        verb = "replace with" if replace else "merge in"
+        click.echo(
+            f"[DRY RUN] Would {verb} redirect URIs on app {app_name!r} "
+            f"({app_id}): {list(redirect_uris)}"
+        )
+        return
+    result = client.set_oidc_app_redirects(
+        project_id,
+        app_id,  # type: ignore[arg-type]
+        list(redirect_uris),
+        replace=replace,
+        post_logout_uris=list(post_logout_uris),
+    )
+    click.echo(json.dumps(result, indent=2))
+
+
 @zitadel.command("enforce-mfa")
 @click.option(
     "--no-passkey",
