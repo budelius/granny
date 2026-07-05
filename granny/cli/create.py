@@ -33,6 +33,7 @@ COMMANDS: dict[str, str] = {
     "scaleway-container": "setup_scaleway_container.py",
     "workmail": "setup_workmail.py",
     "auto-certificate": "auto_certificate.py",
+    "letsencrypt-cert": "letsencrypt_cert.py",
     "mailjet-contacts": "manage_mailjet_contacts.py",
 }
 
