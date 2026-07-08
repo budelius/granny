@@ -159,6 +159,10 @@ granny email workmail create-user example.com --email user@example.com
 granny create s3-website example.com --help
 granny create scaleway-container --name my-app --port 3000
 granny create mailjet-dns example.com
+granny create letsencrypt-cert \
+  --domain '*.example.com' --domain example.com \
+  --dns inwx --zone example.com \
+  --email ops@example.com --out-dir ./certs   # real LE cert via ACME dns-01, any granny DNS provider
 
 # Authentik admin (provider + application + group plumbing)
 granny authentik provision-oauth-app my-app \
@@ -182,6 +186,9 @@ granny authentik api GET /api/v3/core/users/me/        # generic escape hatch
 granny zitadel create-project platform
 granny zitadel create-oidc-app platform my-app \
   --redirect-uri https://app.example.com/oidc/callback
+granny zitadel set-redirect-uris --project platform --app my-app \
+  --redirect-uri https://app.example.com/oidc/callback \
+  --redirect-uri https://app.example.com/oidc/callback2   # merges by default; --replace to set exactly
 granny zitadel rotate-secret platform my-app
 granny zitadel create-user alice --email alice@example.com --password 's3cret'
 granny zitadel ensure-role platform admin                 # Zitadel uses project roles, not groups
@@ -237,7 +244,7 @@ granny indexing google https://example.com/job-posting --action URL_UPDATED
 | Email send infra | Mailjet, AWS SES, AWS WorkMail |
 | AWS inventory | VPCs, Lambdas |
 | Cross-cloud inventory | GPU instances + reservations, credit balances, MTD spend + forecast (AWS, GCP, Azure) |
-| SSL automation | Bunny, Cloudflare, ACM |
+| SSL automation | Bunny, Cloudflare, ACM, Let's Encrypt (ACME dns-01 over any granny DNS provider) |
 | SSO / IdP | Authentik (provider, application, group, and user operations) |
 | Observability admin | Elasticsearch / Kibana native-user management |
 | Azure ops | Identity, subscriptions, ARM deployments, Cognitive Services (Azure OpenAI), App Service, VM sizes, VM inventory/deallocate/delete, RBAC role assignment, compute quota |
