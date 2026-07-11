@@ -1,6 +1,6 @@
 """Granny -- Cloud tools collection for AWS infrastructure and DevOps automation."""
 
-__version__ = "0.17.0"
+__version__ = "0.17.1"
 __all__ = [
     "get_secret",
     "load_secrets_into_env",
