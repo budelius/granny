@@ -8,7 +8,10 @@ env/vault pipeline. See :class:`granny.zitadel.ZitadelClient`.
 from __future__ import annotations
 
 import json
+import secrets
+import string
 import sys
+from pathlib import Path
 
 import click
 
@@ -21,6 +24,35 @@ def _client() -> ZitadelClient:
     except ZitadelError as exc:
         click.echo(str(exc), err=True)
         sys.exit(1)
+
+
+def _client_for(domain: str, key_file: str | None, pat: str | None) -> ZitadelClient:
+    """Build a client for an EXPLICIT instance (SA key file or PAT).
+
+    Unlike :func:`_client` (``from_environment``), this never falls back to the
+    ambient/locke credential — required when addressing a specific instance
+    (e.g. the dev Zitadel) rather than whatever the environment defaults to.
+    """
+    if key_file:
+        try:
+            key = json.loads(Path(key_file).read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError) as exc:
+            raise click.ClickException(f"cannot read SA key {key_file}: {exc}") from exc
+        return ZitadelClient.from_service_account(key, domain)
+    if pat:
+        return ZitadelClient(base_url=domain, token=pat)
+    raise click.ClickException(
+        f"provide a service-account key file or PAT for {domain}"
+    )
+
+
+def _generate_temp_password() -> str:
+    """Strong, policy-safe temp password: 4 upper + 4 lower + 3 digit + 2 symbol, shuffled."""
+    pools = (string.ascii_uppercase, string.ascii_lowercase, string.digits, "!@#$%*-_?")
+    counts = (4, 4, 3, 2)
+    chars = [secrets.choice(p) for p, n in zip(pools, counts) for _ in range(n)]
+    secrets.SystemRandom().shuffle(chars)
+    return "".join(chars)
 
 
 @click.group()
@@ -355,11 +387,15 @@ def create_pat_cmd(user: str, expiration: str | None, dry_run: bool) -> None:
     at vault `granny/infra/zitadel-api-token` (or export ZITADEL_API_TOKEN).
     """
     if dry_run:
-        click.echo(f"[DRY RUN] Would create a PAT for {user!r} (expiration={expiration})")
+        click.echo(
+            f"[DRY RUN] Would create a PAT for {user!r} (expiration={expiration})"
+        )
         return
     client = _client()
     out = client.create_pat(_resolve_user(client, user), expiration_date=expiration)
-    click.echo(json.dumps({"tokenId": out.get("tokenId"), "token": out.get("token")}, indent=2))
+    click.echo(
+        json.dumps({"tokenId": out.get("tokenId"), "token": out.get("token")}, indent=2)
+    )
 
 
 @zitadel.command("revoke-pat")
@@ -373,20 +409,22 @@ def revoke_pat_cmd(user: str, token_id: str, dry_run: bool) -> None:
         return
     client = _client()
     client.delete_pat(_resolve_user(client, user), token_id)
-    click.echo(json.dumps({"user": user, "tokenId": token_id, "revoked": True}, indent=2))
+    click.echo(
+        json.dumps({"user": user, "tokenId": token_id, "revoked": True}, indent=2)
+    )
 
 
 # ── list ─────────────────────────────────────────────────────────────────
 
 
 @zitadel.command("list")
-@click.argument("kind", type=click.Choice(["users", "projects", "apps", "roles", "pats"]))
+@click.argument(
+    "kind", type=click.Choice(["users", "projects", "apps", "roles", "pats"])
+)
 @click.option(
     "--project", default=None, help="Project (id or name) — required for apps/roles."
 )
-@click.option(
-    "--user", default=None, help="User (userName or id) — required for pats."
-)
+@click.option("--user", default=None, help="User (userName or id) — required for pats.")
 @click.option(
     "--json", "as_json", is_flag=True, help="Emit full JSON instead of a table."
 )
@@ -526,4 +564,136 @@ def revoke_user_role_cmd(project: str, user: str, dry_run: bool) -> None:
     )
     click.echo(
         json.dumps({"project": project, "user": user, "revoked": True}, indent=2)
+    )
+
+
+# ── mirror users across instances ──────────────────────────────────────────
+
+
+@zitadel.command("mirror-users")
+@click.option(
+    "--source-domain",
+    required=True,
+    help="Source Zitadel base URL (e.g. https://id.pseekoo.io).",
+)
+@click.option(
+    "--source-key-file", default=None, help="Source service-account key JSON file."
+)
+@click.option(
+    "--source-pat", default=None, help="Source PAT (alternative to --source-key-file)."
+)
+@click.option(
+    "--target-domain",
+    required=True,
+    help="Target Zitadel base URL (e.g. https://id-dev.obachan.dev).",
+)
+@click.option(
+    "--target-key-file", default=None, help="Target service-account key JSON file."
+)
+@click.option(
+    "--target-pat", default=None, help="Target PAT (alternative to --target-key-file)."
+)
+@click.option(
+    "--password-out",
+    required=True,
+    type=click.Path(dir_okay=False),
+    help="File to WRITE generated temp passwords (TSV). Secrets go here only, never stdout.",
+)
+@click.option("--skip", "skip", multiple=True, help="Username to skip (repeatable).")
+@click.option(
+    "--no-email-verified",
+    is_flag=True,
+    help="Do not pre-verify copied emails (default: mark verified).",
+)
+@click.option(
+    "--dry-run", is_flag=True, help="List what would be created; write nothing."
+)
+def mirror_users_cmd(
+    source_domain: str,
+    source_key_file: str | None,
+    source_pat: str | None,
+    target_domain: str,
+    target_key_file: str | None,
+    target_pat: str | None,
+    password_out: str,
+    skip: tuple[str, ...],
+    no_email_verified: bool,
+    dry_run: bool,
+) -> None:
+    """Copy HUMAN users from a source Zitadel to a target with generated temp passwords.
+
+    Each created user gets a random strong temp password with
+    ``passwordChangeRequired`` (forced reset on first login). Passwords are
+    WRITTEN ONLY to ``--password-out`` (TSV), never printed. Idempotent: users
+    already present on the target are skipped; machine/service accounts are never
+    copied. Source and target are addressed EXPLICITLY (key file or PAT) so this
+    works across two instances (e.g. prod -> dev) without relying on the ambient
+    credential.
+    """
+    src = _client_for(source_domain, source_key_file, source_pat)
+    tgt = _client_for(target_domain, target_key_file, target_pat)
+    skipset = set(skip)
+
+    src_humans: dict[str, dict[str, str | None]] = {}
+    for u in src.list_users():
+        human = u.get("human")
+        if not human:
+            continue  # never copy machine/service accounts
+        username = u.get("userName") or u.get("username")
+        if not username or username in skipset:
+            continue
+        profile = human.get("profile", {})
+        src_humans[username] = {
+            "email": human.get("email", {}).get("email"),
+            "first": profile.get("firstName", ""),
+            "last": profile.get("lastName", ""),
+            "display": profile.get("displayName"),
+        }
+
+    existing = {u.get("userName") or u.get("username") for u in tgt.list_users()}
+    todo = {un: info for un, info in src_humans.items() if un not in existing}
+
+    if dry_run:
+        for un, info in todo.items():
+            click.echo(f"[DRY RUN] would create {un} ({info['email']})")
+        click.echo(
+            f"[DRY RUN] {len(todo)} to create, "
+            f"{len(src_humans) - len(todo)} already present on target"
+        )
+        return
+
+    out_path = Path(password_out)
+    created: list[str] = []
+    failed: list[dict[str, str]] = []
+    with out_path.open("w", encoding="utf-8") as fh:
+        fh.write("username\temail\ttemp_password\tuserId\n")
+        for un, info in todo.items():
+            pw = _generate_temp_password()
+            try:
+                res = tgt.create_user(
+                    un,
+                    email=info["email"],
+                    first_name=info["first"] or "",
+                    last_name=info["last"] or "",
+                    display_name=info["display"],
+                    password=pw,
+                    email_verified=not no_email_verified,
+                    password_change_required=True,
+                )
+                uid = res.get("userId") or res.get("id") or ""
+                fh.write(f"{un}\t{info['email']}\t{pw}\t{uid}\n")
+                created.append(un)
+            except ZitadelError as exc:
+                failed.append({"user": un, "error": str(exc)[:160]})
+
+    click.echo(
+        json.dumps(
+            {
+                "created": created,
+                "skipped_existing": len(src_humans) - len(todo),
+                "failed": failed,
+                "passwords_written_to": str(out_path),
+            },
+            indent=2,
+        )
     )
