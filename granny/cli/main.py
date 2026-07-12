@@ -125,6 +125,11 @@ def _register_commands() -> None:
         cli.add_command(zitadel)
     except ImportError:
         pass
+    try:
+        from granny.cli.oauth import oauth
+        cli.add_command(oauth)
+    except ImportError:
+        pass
 
 
 _register_commands()
