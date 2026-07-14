@@ -110,6 +110,52 @@ def create_function(
         click.echo(f"Endpoint: https://{result['domain_name']}")
 
 
+@serverless.command("delete-function")
+@click.argument("function_name")
+@click.option(
+    "--namespace", "namespace_name",
+    help="Namespace name. If omitted, the function must be uniquely named across all namespaces.",
+)
+@click.confirmation_option(prompt="Really delete this Scaleway function?")
+@region_option
+def delete_function(
+    function_name: str,
+    namespace_name: str | None,
+    region: str,
+) -> None:
+    """Delete a Scaleway function by name.
+
+    Resolves ``function_name`` to a function id within ``--namespace`` (or
+    across all namespaces if unique) and issues a DELETE against the
+    Functions API. Custom domains attached to the function are removed by
+    Scaleway as part of the cascade.
+    """
+    c = _client(region)
+
+    function = None
+    if namespace_name:
+        ns = c.find_namespace(namespace_name)
+        if not ns:
+            raise click.ClickException(f"Namespace '{namespace_name}' not found")
+        function = c.find_function(ns["id"], function_name)
+    else:
+        for ns in c.list_namespaces():
+            fn = c.find_function(ns["id"], function_name)
+            if fn:
+                if function:
+                    raise click.ClickException(
+                        f"Function '{function_name}' exists in multiple namespaces; use --namespace"
+                    )
+                function = fn
+
+    if not function:
+        raise click.ClickException(f"Function '{function_name}' not found")
+
+    click.echo(f"Deleting {function['name']} (id={function['id']}, status={function.get('status', '?')})")
+    c.delete_function(function["id"])
+    click.echo("Deleted.")
+
+
 # Patterns that bloat a function package without contributing to runtime.
 # Matches both whole path segments and trailing-name globs.
 _DEFAULT_EXCLUDES = (
