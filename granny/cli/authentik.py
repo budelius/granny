@@ -202,6 +202,29 @@ def rotate_secret_cmd(name: str) -> None:
     click.echo(f"Rotated. New client_secret: {new_secret}")
 
 
+@authentik.command("delete-app")
+@click.argument("slug")
+@click.option(
+    "--name",
+    "expected_name",
+    required=True,
+    help="Required display-name confirmation. Refuses to delete on mismatch.",
+)
+@click.confirmation_option(prompt="Really delete this Authentik application?")
+def delete_app_cmd(slug: str, expected_name: str) -> None:
+    """Delete an Authentik application by slug after confirming its name."""
+    client = _client()
+    try:
+        deleted = client.delete_application(slug, expected_name=expected_name)
+    except AuthentikError as exc:
+        click.echo(f"Authentik error: {exc}", err=True)
+        sys.exit(1)
+    if deleted:
+        click.echo(f"Application {slug} deleted")
+    else:
+        click.echo(f"Application {slug} already absent")
+
+
 @authentik.command("ensure-group")
 @click.argument("name", default=ADMIN_GROUP_NAME)
 def ensure_group_cmd(name: str) -> None:

@@ -39,6 +39,87 @@ def lambdas(region: tuple[str, ...], as_json: bool) -> None:
         click.echo(f"{fn.name:<40} {fn.runtime:<15} {fn.version:<10}")
 
 
+@analyze.command("k8s-services")
+@click.option("--context", "context_name", help="Kubernetes context to scan")
+@click.option("--kubeconfig", help="Path to kubeconfig file")
+@click.option(
+    "--namespace",
+    "namespaces",
+    multiple=True,
+    help="Namespace to scan (repeatable; default: all)",
+)
+@click.option(
+    "--include-annotations",
+    is_flag=True,
+    help="Include service annotations in JSON output",
+)
+@click.option("--json-output", "as_json", is_flag=True, help="Output as JSON")
+@click.option("--mermaid", is_flag=True, help="Output a Mermaid architecture graph")
+@click.option(
+    "--enforce-readonly/--no-enforce-readonly",
+    default=True,
+    help="Refuse to scan if the Kubernetes identity has write permissions",
+)
+def k8s_services(
+    context_name: str | None,
+    kubeconfig: str | None,
+    namespaces: tuple[str, ...],
+    include_annotations: bool,
+    as_json: bool,
+    mermaid: bool,
+    enforce_readonly: bool,
+) -> None:
+    """Scan Kubernetes Services and map them to workloads and ingresses."""
+    from dataclasses import asdict
+
+    from granny.analyze.kubernetes import render_mermaid, scan_kubernetes_services
+
+    scan = scan_kubernetes_services(
+        context=context_name,
+        kubeconfig=kubeconfig,
+        namespaces=list(namespaces) or None,
+        include_annotations=include_annotations,
+        enforce_readonly=enforce_readonly,
+    )
+
+    if as_json:
+        payload = asdict(scan)
+        payload["summary"] = scan.summary
+        click.echo(json.dumps(payload, indent=2))
+        return
+
+    if mermaid:
+        click.echo(render_mermaid(scan))
+        return
+
+    summary = scan.summary
+    cluster = context_name or "current-context"
+    click.echo(f"Kubernetes service architecture scan: {cluster}")
+    click.echo(
+        f"Namespaces: {summary['namespaces']} | Services: {summary['services']} | "
+        f"Workloads: {summary['workloads']} | Ingresses: {summary['ingresses']} | "
+        f"Exposed: {summary['externally_exposed_services']}"
+    )
+    click.echo("")
+    click.echo(
+        f"{'Namespace':<24} {'Service':<34} {'Type':<14} "
+        f"{'Ports':<18} {'Endpoints':<9} Routes / Workloads"
+    )
+    click.echo("-" * 120)
+    for service in scan.services:
+        ports = ",".join(str(port.port) for port in service.ports if port.port) or "-"
+        routes = ",".join(service.ingress_hosts) or "-"
+        workloads = ",".join(service.matched_workloads) or service.external_name or "-"
+        click.echo(
+            f"{service.namespace:<24} {service.name:<34} {service.service_type:<14} "
+            f"{ports:<18} {service.endpoint_count:<9} {routes} -> {workloads}"
+        )
+    if scan.findings:
+        click.echo("\nFindings:")
+        for finding in scan.findings:
+            click.echo(f"- {finding}")
+
+
 @analyze.command()
 @click.option("--region", multiple=True, help="Specific region(s) to query")
 @click.option("--json-output", "as_json", is_flag=True, help="Output as JSON")

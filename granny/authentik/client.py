@@ -257,6 +257,24 @@ class AuthentikClient:
             body={"client_secret": ""},
         )
 
+    def delete_application(self, slug: str, *, expected_name: str | None = None) -> bool:
+        """Delete an application by slug.
+
+        Returns ``True`` when an application was deleted and ``False`` when
+        it was already absent. When ``expected_name`` is provided, the
+        application display name must match before deletion.
+        """
+        app = self.find_application_by_slug(slug)
+        if not app:
+            return False
+        if expected_name is not None and app.get("name") != expected_name:
+            raise AuthentikError(
+                409,
+                f"Application {slug!r} has name {app.get('name')!r}, not {expected_name!r}",
+            )
+        self.request("DELETE", f"/api/v3/core/applications/{slug}/")
+        return True
+
     def create_user(
         self,
         username: str,

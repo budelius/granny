@@ -22,7 +22,7 @@ stays out of this repo.
 granny/
   cli/           Click command groups -- thin shims, no business logic
   analyze/       Cross-cloud inventory (vpcs, lambdas, gpus, credits, costs,
-                 GPU cluster pricing)
+                 GPU cluster pricing, Kubernetes service architecture via kubectl)
   authentik/     Authentik admin: provider, application, group, and user operations
   azure/         Azure account/identity, ARM deployments, Cognitive Services
                  (Azure OpenAI), App Service, VM sizes, VM inventory/lifecycle

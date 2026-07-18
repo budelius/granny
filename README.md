@@ -140,6 +140,13 @@ granny analyze costs                               # MTD + month-end forecast
 granny analyze capacity-blocks --instance-type p5.48xlarge --hours 24
 granny analyze capacity-blocks --instance-type p5e.48xlarge --count 2 --hours 168
 
+# Kubernetes service architecture inventory via kubectl
+# Maps Services to Ingress hosts, EndpointSlices/Endpoints, and owning workloads.
+# Refuses writable Kubernetes identities by default; use a read-only kubeconfig.
+granny analyze k8s-services --context prod-cluster --namespace platform
+granny analyze k8s-services --context prod-cluster --json-output
+granny analyze k8s-services --context prod-cluster --mermaid > architecture.mmd
+
 # Cloudflare account resources (Workers, D1, R2, KV)
 granny cloudflare d1 create my-app
 granny cloudflare r2 create my-app-media
@@ -172,6 +179,7 @@ granny authentik provision-oauth-app my-app \
   --group my-app-admins
 granny authentik list providers
 granny authentik rotate-secret my-oauth-provider
+granny authentik delete-app my-app --name "My App"     # name-confirmed application delete
 granny authentik add-user-to-group user@example.com     # defaults to dash_admins
 granny authentik api GET /api/v3/core/users/me/        # generic escape hatch
 
