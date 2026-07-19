@@ -71,6 +71,66 @@ class CloudflareDNSProvider(DNSProvider):
             return []
         return list(result[0].get("name_servers") or [])
 
+    def _account_id(self) -> str:
+        """Resolve the account id the token operates on.
+
+        ``GET /accounts`` needs the Account Settings read scope, which
+        zone-scoped tokens usually lack — fall back to the ``account`` stamped
+        on any zone the token can already see.
+        """
+        try:
+            body = self._request("GET", "/accounts", params={"per_page": 1})
+            result = body.get("result") or []
+            if result:
+                return result[0]["id"]
+        except RuntimeError:
+            pass
+        body = self._request("GET", "/zones", params={"per_page": 1})
+        result = body.get("result") or []
+        if not result:
+            raise RuntimeError(
+                "Cloudflare: cannot resolve account id — token sees no "
+                "accounts and no zones"
+            )
+        return result[0]["account"]["id"]
+
+    @staticmethod
+    def _zone_meta(zone: dict) -> dict:
+        return {
+            "id": zone.get("id"),
+            "name": zone.get("name"),
+            "status": zone.get("status"),
+            "nameservers": list(zone.get("name_servers") or []),
+        }
+
+    def create_zone(self, zone_name: str) -> dict:
+        """Create ``zone_name`` in the token's account (idempotent).
+
+        Requires the account-level ``Zone: Create`` token permission; without
+        it Cloudflare answers 403 ``com.cloudflare.api.account.zone.create``.
+        If the zone already exists in this account, returns it unchanged.
+        """
+        existing = self._request("GET", "/zones", params={"name": zone_name})
+        result = existing.get("result") or []
+        if result:
+            logger.info("Cloudflare: zone %s already exists", zone_name)
+            return self._zone_meta(result[0])
+        body = self._request(
+            "POST",
+            "/zones",
+            json={
+                "name": zone_name,
+                "account": {"id": self._account_id()},
+                "type": "full",
+            },
+        )
+        zone = body.get("result") or {}
+        self._zone_cache[zone_name] = zone.get("id", "")
+        logger.info(
+            "Cloudflare: created zone %s (status %s)", zone_name, zone.get("status")
+        )
+        return self._zone_meta(zone)
+
     def _fqdn(self, zone_id: str, name: str) -> str:
         # Cloudflare's record API uses full FQDN for `name`. The caller passes
         # us a short name relative to the zone, so we need the zone name to

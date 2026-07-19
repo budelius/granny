@@ -145,6 +145,27 @@ def dns() -> None:
     """Provider-agnostic DNS record management."""
 
 
+@dns.command("create-zone")
+@click.argument("zone")
+@provider_option
+def create_zone_cmd(zone: str, provider: str | None) -> None:
+    """Create zone ZONE at the provider (idempotent).
+
+    Prints the assigned nameservers — point the registrar's NS records at
+    them to activate the zone. Cloudflare requires a token with the
+    account-level ``Zone: Create`` permission.
+    """
+    zone = zone.strip().rstrip(".").lower()
+    if not zone or "." not in zone:
+        raise click.UsageError(f"ZONE must be a registrable domain, got {zone!r}")
+    dns_provider = _provider_instance(provider)
+    try:
+        meta = dns_provider.create_zone(zone)
+    except NotImplementedError as exc:
+        raise click.ClickException(str(exc))
+    click.echo(json.dumps(meta, indent=2))
+
+
 @dns.command("list")
 @provider_option
 @domain_option

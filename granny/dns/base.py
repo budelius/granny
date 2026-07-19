@@ -33,6 +33,18 @@ class DNSProvider(ABC):
             f"{type(self).__name__} does not expose nameservers via API"
         )
 
+    def create_zone(self, zone_name: str) -> dict:
+        """Create ``zone_name`` at the provider (idempotent where supported).
+
+        Returns provider metadata for the zone — at minimum ``id``, ``name``,
+        ``status``, and ``nameservers`` (the pair the registrar must delegate
+        to). Providers whose API has no zone-creation endpoint (or where zones
+        are registrar-managed) keep this default.
+        """
+        raise NotImplementedError(
+            f"{type(self).__name__} does not support zone creation via API"
+        )
+
     @abstractmethod
     def list_records(
         self,
