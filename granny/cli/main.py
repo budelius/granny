@@ -101,6 +101,11 @@ def _register_commands() -> None:
     except ImportError:
         pass
     try:
+        from granny.cli.airtable import airtable
+        cli.add_command(airtable)
+    except ImportError:
+        pass
+    try:
         from granny.cli.elk import elk
         cli.add_command(elk)
     except ImportError:

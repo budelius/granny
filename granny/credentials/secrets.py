@@ -148,6 +148,7 @@ SECRET_MAP: dict[str, str] = {
     "HETZNER_S3_SECRET_KEY": "hetzner-s3-secret-key",
     "HETZNER_DNS_API_TOKEN": "hetzner-dns-api-token",
     "BUNNY_API_KEY": "bunny-api-key",
+    "AIRTABLE_API_KEY": "airtable-api-key",
     "SCW_ACCESS_KEY": "scw-access-key",
     "SCW_SECRET_KEY": "scw-secret-key",
     "SCW_DEFAULT_PROJECT_ID": "scw-default-project-id",

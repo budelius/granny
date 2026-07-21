@@ -81,6 +81,7 @@ Common keys:
 | Provider | Variables |
 |---|---|
 | Bunny | `BUNNY_API_KEY` (+ `BUNNY_API_KEY_<CUSTOMER>` for multi-account) |
+| Airtable | `AIRTABLE_API_KEY` |
 | Cloudflare | `CLOUDFLARE_API_TOKEN` |
 | Hetzner | `HETZNER_S3_ACCESS_KEY`, `HETZNER_S3_SECRET_KEY`, `HETZNER_DNS_API_TOKEN` |
 | Scaleway | `SCW_ACCESS_KEY`, `SCW_SECRET_KEY`, `SCW_DEFAULT_PROJECT_ID` |
