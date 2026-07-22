@@ -153,6 +153,15 @@ granny cloudflare d1 create my-app
 granny cloudflare r2 create my-app-media
 granny cloudflare site provision my-app --secret-from-vault MAILJET_API_KEY
 
+# Airtable endpoint maintenance
+granny airtable bases
+granny airtable tables --base app123
+granny airtable find-text --base app123 --table Config --contains old.example.com
+granny airtable replace-text --base app123 --table Config \
+  --field Endpoint --old old.example.com --new new.example.com       # dry run
+granny airtable replace-text --base app123 --table Config \
+  --field Endpoint --old old.example.com --new new.example.com --apply --confirm
+
 # Multi-arch Docker builds with deterministic tags
 granny docker build-base --image myapp-base --hash-file requirements.txt
 
@@ -250,6 +259,7 @@ granny indexing google https://example.com/job-posting --action URL_UPDATED
 | Object storage | AWS S3, Bunny Storage, Hetzner S3 |
 | Serverless functions | Scaleway FaaS, Scaleway Containers |
 | Workers / KV / D1 / R2 | Cloudflare |
+| Record search and endpoint maintenance | Airtable |
 | Email send infra | Mailjet, AWS SES, AWS WorkMail |
 | AWS inventory | VPCs, Lambdas |
 | Cross-cloud inventory | GPU instances + reservations, credit balances, MTD spend + forecast (AWS, GCP, Azure) |
@@ -286,6 +296,7 @@ load_secrets_into_env()
 ```
 granny/
   cli/           Click command groups (granny <group> <verb>)
+  airtable/     Airtable record search and endpoint maintenance
   analyze/      Cross-cloud inventory (AWS, GCP, Azure)
   authentik/    Authentik admin
   azure/        Azure account, ARM deployments, Cognitive, App Service, VMs, RBAC roles, quota
@@ -305,6 +316,7 @@ granny/
 
 ## Where to look next
 
+- [`CHANGELOG.md`](CHANGELOG.md) — release history and notable changes.
 - [`Project_Guidelines.md`](Project_Guidelines.md) — contributor toolchain,
   conventions, extension checklists, release flow.
 - [`AGENTS.md`](AGENTS.md) — instructions for AI coding agents working
