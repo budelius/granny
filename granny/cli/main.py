@@ -38,65 +38,78 @@ def cli(verbose: bool, quiet: bool) -> None:
 
 # Register command groups -------------------------------------------------
 
+
 def _register_commands() -> None:
     """Register available command groups."""
     try:
         from granny.cli.credentials import credentials
+
         cli.add_command(credentials)
     except ImportError:
         pass
     try:
         from granny.cli.analyze import analyze
+
         cli.add_command(analyze)
     except ImportError:
         pass
     try:
         from granny.cli.cdn import cdn
+
         cli.add_command(cdn)
     except ImportError:
         pass
     try:
         from granny.cli.create import create
+
         cli.add_command(create)
     except ImportError:
         pass
     try:
         from granny.cli.docker import docker
+
         cli.add_command(docker)
     except ImportError:
         pass
     try:
         from granny.cli.dns import dns
+
         cli.add_command(dns)
     except ImportError:
         pass
     try:
         from granny.cli.cloudflare import cloudflare
+
         cli.add_command(cloudflare)
     except ImportError:
         pass
     try:
         from granny.cli.storage import storage
+
         cli.add_command(storage)
     except ImportError:
         pass
     try:
         from granny.cli.edge import edge
+
         cli.add_command(edge)
     except ImportError:
         pass
     try:
         from granny.cli.serverless import serverless
+
         cli.add_command(serverless)
     except ImportError:
         pass
     try:
         from granny.cli.email import email
+
         cli.add_command(email)
     except ImportError:
         pass
     try:
         from granny.cli.authentik import authentik
+
         cli.add_command(authentik)
     except ImportError:
         pass
@@ -107,32 +120,45 @@ def _register_commands() -> None:
         pass
     try:
         from granny.cli.elk import elk
+
         cli.add_command(elk)
     except ImportError:
         pass
     try:
         from granny.cli.azure import azure
+
         cli.add_command(azure)
     except ImportError:
         pass
     try:
         from granny.cli.aws import aws
+
         cli.add_command(aws)
     except ImportError:
         pass
     try:
         from granny.cli.indexing import indexing
+
         cli.add_command(indexing)
     except ImportError:
         pass
     try:
         from granny.cli.zitadel import zitadel
+
         cli.add_command(zitadel)
     except ImportError:
         pass
     try:
         from granny.cli.oauth import oauth
+
         cli.add_command(oauth)
+    except ImportError:
+        pass
+    try:
+        from granny.cli.knative import knative
+
+        cli.add_command(knative)
+        cli.add_command(knative, name="faas")
     except ImportError:
         pass
 
