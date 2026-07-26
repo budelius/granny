@@ -2,7 +2,7 @@
 
 Notable changes to granny-devops are documented here.
 
-## [0.18.0] - 2026-07-22
+## [0.18.0] - 2026-07-26
 
 ### Added
 
