@@ -38,6 +38,7 @@ granny/
   elk/           Elasticsearch / Kibana security user management
   email/         Mailjet, AWS WorkMail, SES forwarding
   indexing/      IndexNow + Google Indexing API submission clients
+  knative/       Knative FaaS control API client
   serverless/    Scaleway FaaS
   storage/       AWS S3, Bunny Storage, Hetzner S3
 scripts/         release.sh / release.ps1 / run-tests.py
@@ -86,6 +87,7 @@ Registered keys (`SECRET_MAP` in `granny/credentials/secrets.py`):
 `HETZNER_S3_SECRET_KEY`, `HETZNER_DNS_API_TOKEN`,
 `BUNNY_API_KEY` (+ `_<CUSTOMER>`), `AIRTABLE_API_KEY`,
 `SCW_ACCESS_KEY`, `SCW_SECRET_KEY`, `SCW_DEFAULT_PROJECT_ID`,
+`OBACHAN_API_KEY`, `OBACHAN_API_BASE_URL`,
 `MAILJET_API_KEY`, `MAILJET_SECRET_KEY`,
 `CLOUDNS_AUTH_ID`/`_PASSWORD`, `CLOUDNS_SUB_AUTH_ID`/`_USER`,
 `INWX_USERNAME`/`_PASSWORD`/`_SHARED_SECRET` (last only with 2FA),

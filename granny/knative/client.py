@@ -1,6 +1,6 @@
-"""KnativeClient: requests.Session wrapper for the obachan FaaS control API.
+"""Requests client for a Knative FaaS control API.
 
-Covers all 7 HTTP verbs exposed by the Phase 18 ``/api/faas/*`` routes:
+Covers the HTTP operations exposed by the ``/api/faas/*`` routes:
 
   deploy  → POST   /api/faas/functions
   list    → GET    /api/faas/functions
@@ -10,12 +10,10 @@ Covers all 7 HTTP verbs exposed by the Phase 18 ``/api/faas/*`` routes:
   logs    → GET    /api/faas/functions/{name}/logs?tail={n}
   invoke  → POST   /api/faas/functions/{name}/invoke
 
-Auth: ``X-API-Key`` header (APISIX key-auth plugin, Phase 17/18).
-Secret resolution: ``OBACHAN_API_KEY`` / ``OBACHAN_API_BASE_URL`` via the
-granny credentials chain (env → Vaultwarden).
+Auth uses the ``X-API-Key`` header. Configuration resolves through the
+granny credentials chain (environment, then Vaultwarden).
 
-Security note (T-19-01-01): the API key is never echoed in RuntimeError
-messages or log output — only method, path, and status code are included.
+The API key is never included in exceptions or log output.
 """
 
 from __future__ import annotations
@@ -29,19 +27,20 @@ from granny.credentials.secrets import get_secret
 
 logger = logging.getLogger(__name__)
 
-# Name validation pattern mirrors the server-side _KSVC_NAME_RE (Phase 18).
-# Client-side enforcement surfaces errors before any HTTP call is made
-# (T-19-01-02 / T-18-03-03 defense-in-depth).
 _NAME_RE = re.compile(r"^[a-z][a-z0-9-]{0,61}[a-z0-9]$")
 
 
+class KnativeNotFoundError(KeyError, RuntimeError):
+    """Raised when a function does not exist."""
+
+
 class KnativeClient:
-    """Authenticated HTTP client for the obachan FaaS control API.
+    """Authenticated HTTP client for a Knative FaaS control API.
 
     Parameters
     ----------
     base_url:
-        Base URL of the control plane (e.g. ``https://faas-api.prod.pseekoo.io``).
+        Base URL of the control plane (e.g. ``https://faas-api.example.com``).
         Resolved from ``OBACHAN_API_BASE_URL`` (env or vault) when not passed.
         Trailing slash is stripped.
     api_key:
@@ -113,9 +112,10 @@ class KnativeClient:
         url = f"{self.base_url}{path}"
         resp = getattr(self._session, method.lower())(url, json=data, timeout=30)
         if resp.status_code >= 400:
-            raise RuntimeError(
-                f"FaaS API {method} {path}: {resp.status_code} {resp.text}"
-            )
+            message = f"FaaS API {method} {path}: {resp.status_code} {resp.text[:1000]}"
+            if resp.status_code == 404:
+                raise KnativeNotFoundError(message)
+            raise RuntimeError(message)
         if resp.status_code == 204 or not resp.text:
             return {}
         return resp.json()
@@ -201,10 +201,8 @@ class KnativeClient:
         self._validate_name(name)
         try:
             return self._request("GET", f"/api/faas/functions/{name}")
-        except RuntimeError as exc:
-            if "404" in str(exc):
-                return None
-            raise
+        except KeyError:
+            return None
 
     def scale(
         self,
@@ -247,9 +245,10 @@ class KnativeClient:
 
         Raises
         ------
+        KeyError
+            When the function does not exist.
         RuntimeError
-            On any non-2xx response (including 404 if the function does not
-            exist).
+            On any other non-2xx response.
         """
         self._validate_name(name)
         self._request("DELETE", f"/api/faas/functions/{name}")
@@ -282,7 +281,10 @@ class KnativeClient:
         url = f"{self.base_url}/api/faas/functions/{name}/logs"
         resp = self._session.get(url, params={"tail": tail}, timeout=30)
         if resp.status_code >= 400:
-            raise RuntimeError(f"FaaS API logs {name}: {resp.status_code} {resp.text}")
+            message = f"FaaS API logs {name}: {resp.status_code} {resp.text[:1000]}"
+            if resp.status_code == 404:
+                raise KnativeNotFoundError(message)
+            raise RuntimeError(message)
         return resp.text
 
     def invoke(
@@ -330,7 +332,8 @@ class KnativeClient:
             timeout=30,
         )
         if resp.status_code >= 400:
-            raise RuntimeError(
-                f"FaaS API invoke {name}: {resp.status_code} {resp.text}"
-            )
+            message = f"FaaS API invoke {name}: {resp.status_code} {resp.text[:1000]}"
+            if resp.status_code == 404:
+                raise KnativeNotFoundError(message)
+            raise RuntimeError(message)
         return resp.content

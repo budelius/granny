@@ -1,4 +1,4 @@
-"""granny knative / granny faas — Knative function management via obachan FaaS control API."""
+"""Knative function management commands."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ import click
 
 @click.group()
 def knative() -> None:
-    """Knative function management via obachan FaaS control API."""
+    """Manage functions through a Knative FaaS control API."""
 
 
 # ---------------------------------------------------------------------------

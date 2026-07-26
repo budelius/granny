@@ -331,11 +331,11 @@ class TestDelete:
             result = c.delete("my-fn")
         assert result is None
 
-    def test_delete_raises_runtime_error_on_404(self) -> None:
+    def test_delete_raises_key_error_on_404(self) -> None:
         c = _client()
         with patch.object(c._session, "delete") as mock_delete:
             mock_delete.return_value = MagicMock(status_code=404, text="Not Found")
-            with pytest.raises(RuntimeError, match="404"):
+            with pytest.raises(KeyError, match="404"):
                 c.delete("my-fn")
 
 
@@ -376,11 +376,11 @@ class TestLogs:
             result = c.logs("my-fn")
         assert result == "line1\nline2"
 
-    def test_logs_raises_runtime_error_on_404(self) -> None:
+    def test_logs_raises_key_error_on_404(self) -> None:
         c = _client()
         with patch.object(c._session, "get") as mock_get:
             mock_get.return_value = MagicMock(status_code=404, text="Not Found")
-            with pytest.raises(RuntimeError, match="404"):
+            with pytest.raises(KeyError, match="404"):
                 c.logs("my-fn")
 
 
@@ -431,13 +431,13 @@ class TestInvoke:
             result = c.invoke("my-fn")
         assert result == b'{"result":"ok"}'
 
-    def test_invoke_raises_runtime_error_on_404(self) -> None:
+    def test_invoke_raises_key_error_on_404(self) -> None:
         c = _client()
         with patch.object(c._session, "post") as mock_post:
             mock_post.return_value = MagicMock(
                 status_code=404, content=b"Not Found", text="Not Found"
             )
-            with pytest.raises(RuntimeError, match="404"):
+            with pytest.raises(KeyError, match="404"):
                 c.invoke("my-fn")
 
 

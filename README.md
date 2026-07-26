@@ -85,6 +85,7 @@ Common keys:
 | Cloudflare | `CLOUDFLARE_API_TOKEN` |
 | Hetzner | `HETZNER_S3_ACCESS_KEY`, `HETZNER_S3_SECRET_KEY`, `HETZNER_DNS_API_TOKEN` |
 | Scaleway | `SCW_ACCESS_KEY`, `SCW_SECRET_KEY`, `SCW_DEFAULT_PROJECT_ID` |
+| Knative FaaS API | `OBACHAN_API_KEY`, `OBACHAN_API_BASE_URL` |
 | Mailjet | `MAILJET_API_KEY`, `MAILJET_SECRET_KEY` |
 | deSEC | `DESEC_API_TOKEN` |
 | ClouDNS | `CLOUDNS_AUTH_ID`/`_PASSWORD` (or `_SUB_AUTH_ID`/`_SUB_AUTH_USER`) |
@@ -167,6 +168,16 @@ granny docker build-base --image myapp-base --hash-file requirements.txt
 
 # Scaleway FaaS
 granny serverless deploy my-fn --source-dir ./dist --namespace my-app
+granny serverless delete-function my-fn --namespace my-app --yes
+
+# Knative FaaS control API (`granny faas` is an alias)
+granny knative list
+granny knative deploy my-fn --image registry.example.com/my-fn:latest \
+  --env LOG_LEVEL=info --min-scale 0 --max-scale 5
+granny knative scale my-fn --max-scale 10
+granny knative logs my-fn --tail 100
+granny knative invoke my-fn --method POST --path /process --body '{"job": 42}'
+granny knative remove my-fn --yes
 
 # Mailjet + WorkMail
 granny email mailjet setup-dns example.com
@@ -257,7 +268,7 @@ granny indexing google https://example.com/job-posting --action URL_UPDATED
 | CDN | Bunny |
 | Edge scripting | Bunny |
 | Object storage | AWS S3, Bunny Storage, Hetzner S3 |
-| Serverless functions | Scaleway FaaS, Scaleway Containers |
+| Serverless functions | Scaleway FaaS, Scaleway Containers, Knative FaaS control API |
 | Workers / KV / D1 / R2 | Cloudflare |
 | Record search and endpoint maintenance | Airtable |
 | Email send infra | Mailjet, AWS SES, AWS WorkMail |
@@ -310,6 +321,7 @@ granny/
   elk/          Elasticsearch / Kibana security user management
   email/        Mailjet, WorkMail, SES forwarding
   indexing/     IndexNow + Google Indexing API
+  knative/      Knative FaaS control API client
   serverless/   Scaleway FaaS
   storage/      Object storage (AWS / Bunny / Hetzner)
 ```
