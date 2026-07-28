@@ -2,6 +2,12 @@
 
 Notable changes to granny-devops are documented here.
 
+## [Unreleased]
+
+### Changed
+
+- Route trusted publish jobs to the protected Obachan staging OSS runner.
+
 ## [0.18.0] - 2026-07-26
 
 ### Added
@@ -24,5 +30,6 @@ Notable changes to granny-devops are documented here.
 - Add dry-run-by-default `granny airtable replace-text`, with explicit `--apply --confirm` safeguards.
 - Register `AIRTABLE_API_KEY` for environment and Vaultwarden credential resolution.
 
+[Unreleased]: https://gitlab.com/martin-wieser/granny/-/compare/v0.18.0...main
 [0.18.0]: https://gitlab.com/martin-wieser/granny/-/compare/v0.17.4...v0.18.0
 [0.17.4]: https://gitlab.com/martin-wieser/granny/-/compare/v0.17.3...v0.17.4
