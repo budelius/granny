@@ -86,6 +86,7 @@ Common keys:
 | Hetzner | `HETZNER_S3_ACCESS_KEY`, `HETZNER_S3_SECRET_KEY`, `HETZNER_DNS_API_TOKEN` |
 | Scaleway | `SCW_ACCESS_KEY`, `SCW_SECRET_KEY`, `SCW_DEFAULT_PROJECT_ID` |
 | Knative FaaS API | `OBACHAN_API_KEY`, `OBACHAN_API_BASE_URL` |
+| Obachan OpenBao | `OBACHAN_BAO_ADDR`, `OBACHAN_BAO_TOKEN` |
 | Mailjet | `MAILJET_API_KEY`, `MAILJET_SECRET_KEY` |
 | deSEC | `DESEC_API_TOKEN` |
 | ClouDNS | `CLOUDNS_AUTH_ID`/`_PASSWORD` (or `_SUB_AUTH_ID`/`_SUB_AUTH_USER`) |
@@ -101,6 +102,12 @@ what's configured at any time.
 ```shell
 granny --help                          # see every command group
 granny <group> --help                  # drill into one
+
+# Provision mail/calendar OAuth clients to a dashboard env and Obachan OpenBao
+granny oauth provision-productivity --env-file ../dashboard/.deploy.env \
+  --obachan-env staging --obachan-app dashboard \
+  --google-client-json client_secret.json \
+  --azure-client-id "$AZURE_CLIENT_ID" --azure-client-secret "$AZURE_CLIENT_SECRET"
 ```
 
 The CLI is organized by capability, not by provider. You pick the
@@ -279,6 +286,7 @@ granny indexing google https://example.com/job-posting --action URL_UPDATED
 | Observability admin | Elasticsearch / Kibana native-user management |
 | Azure ops | Identity, subscriptions, ARM deployments, Cognitive Services (Azure OpenAI), App Service, VM sizes, VM inventory/deallocate/delete, RBAC role assignment, compute quota |
 | Search indexing | IndexNow (Bing/Yandex/Seznam/Naver/Yep), Google Indexing API |
+| Productivity OAuth | Google Cloud and Microsoft Entra mail/calendar client provisioning |
 
 ## As a library
 
@@ -322,6 +330,7 @@ granny/
   email/        Mailjet, WorkMail, SES forwarding
   indexing/     IndexNow + Google Indexing API
   knative/      Knative FaaS control API client
+  oauth/        Google/Microsoft productivity OAuth provisioning
   serverless/   Scaleway FaaS
   storage/      Object storage (AWS / Bunny / Hetzner)
 ```
