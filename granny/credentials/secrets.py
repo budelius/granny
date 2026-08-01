@@ -193,6 +193,7 @@ SECRET_MAP: dict[str, str] = {
     # Knative FaaS control API. The base URL is vault-distributed configuration.
     "OBACHAN_API_KEY": "obachan-api-key",
     "OBACHAN_API_BASE_URL": "obachan-api-base-url",
+    "OBACHAN_BAO_TOKEN": "obachan-bao-token",
 }
 
 # Module-level cache so vault is only contacted once per process
