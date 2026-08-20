@@ -46,6 +46,94 @@ def _month_bounds(today: date | None = None) -> tuple[date, date, date]:
 # ---------------------------------------------------------------------------
 
 
+def _ce_client(profile: str):  # noqa: ANN202  (botocore client type is dynamic)
+    """Build a Cost Explorer client for a named AWS profile (us-east-1 global endpoint)."""
+    import boto3
+
+    session = boto3.Session(profile_name=profile if profile != "default" else None)
+    return session.client("ce", region_name="us-east-1")
+
+
+@dataclass
+class ServiceCostHistory:
+    account: str
+    currency: str
+    months: list[str]  # "YYYY-MM" labels, oldest -> newest
+    by_service: dict[str, list[float]]  # service -> per-month amount aligned to `months`
+
+
+def _history_bounds(months: int, today: date) -> tuple[date, date]:
+    """First-of-month `months` ago (inclusive) .. first-of-current-month (exclusive)."""
+    start = today.replace(day=1)
+    for _ in range(months):
+        start = (start - timedelta(days=1)).replace(day=1)
+    end = today.replace(day=1)
+    return start, end
+
+
+def aws_costs_by_service(
+    profile: str, months: int = 3, *, today: date | None = None
+) -> ServiceCostHistory:
+    """Per-service monthly UnblendedCost for the last `months` complete months."""
+    from botocore.exceptions import BotoCoreError, ClientError
+
+    today = today or date.today()
+    start, end = _history_bounds(months, today)
+    ce = _ce_client(profile)
+
+    currency = "USD"
+    labels: list[str] = []
+    per_month: list[dict[str, float]] = []
+    try:
+        resp = ce.get_cost_and_usage(
+            TimePeriod={"Start": start.isoformat(), "End": end.isoformat()},
+            Granularity="MONTHLY",
+            Metrics=["UnblendedCost"],
+            GroupBy=[{"Type": "DIMENSION", "Key": "SERVICE"}],
+        )
+        for bucket in resp.get("ResultsByTime", []):
+            label = bucket.get("TimePeriod", {}).get("Start", "")[:7]
+            labels.append(label)
+            month_map: dict[str, float] = {}
+            for group in bucket.get("Groups", []):
+                keys = group.get("Keys", [])
+                svc = keys[0] if keys else "unknown"
+                metric = group.get("Metrics", {}).get("UnblendedCost", {})
+                month_map[svc] = float(metric.get("Amount", 0.0))
+                currency = metric.get("Unit", currency)
+            per_month.append(month_map)
+    except (BotoCoreError, ClientError) as e:
+        logger.warning("AWS %s cost-by-service: %s", profile, e)
+
+    services = sorted({svc for m in per_month for svc in m})
+    by_service = {
+        svc: [per_month[i].get(svc, 0.0) for i in range(len(labels))] for svc in services
+    }
+    return ServiceCostHistory(
+        account=profile, currency=currency, months=labels, by_service=by_service
+    )
+
+
+def aws_cost_total(profile: str, start: date, end: date) -> float | None:
+    """Total UnblendedCost over [start, end); None on error."""
+    from botocore.exceptions import BotoCoreError, ClientError
+
+    ce = _ce_client(profile)
+    try:
+        resp = ce.get_cost_and_usage(
+            TimePeriod={"Start": start.isoformat(), "End": end.isoformat()},
+            Granularity="MONTHLY",
+            Metrics=["UnblendedCost"],
+        )
+        total = 0.0
+        for bucket in resp.get("ResultsByTime", []):
+            total += float(bucket.get("Total", {}).get("UnblendedCost", {}).get("Amount", 0.0))
+        return total
+    except (BotoCoreError, ClientError) as e:
+        logger.warning("AWS %s cost total: %s", profile, e)
+        return None
+
+
 def aws_costs(profiles: list[str] | None = None) -> list[CostSummary]:
     """Month-to-date spend + month-end forecast via Cost Explorer."""
     import boto3
