@@ -14,6 +14,10 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import botocore.client
 
 logger = logging.getLogger(__name__)
 
@@ -46,7 +50,7 @@ def _month_bounds(today: date | None = None) -> tuple[date, date, date]:
 # ---------------------------------------------------------------------------
 
 
-def _ce_client(profile: str):  # noqa: ANN202  (botocore client type is dynamic)
+def _ce_client(profile: str) -> "botocore.client.BaseClient":
     """Build a Cost Explorer client for a named AWS profile (us-east-1 global endpoint)."""
     import boto3
 
@@ -79,12 +83,12 @@ def aws_costs_by_service(
 
     today = today or date.today()
     start, end = _history_bounds(months, today)
-    ce = _ce_client(profile)
 
     currency = "USD"
     labels: list[str] = []
     per_month: list[dict[str, float]] = []
     try:
+        ce = _ce_client(profile)
         resp = ce.get_cost_and_usage(
             TimePeriod={"Start": start.isoformat(), "End": end.isoformat()},
             Granularity="MONTHLY",
@@ -118,8 +122,8 @@ def aws_cost_total(profile: str, start: date, end: date) -> float | None:
     """Total UnblendedCost over [start, end); None on error."""
     from botocore.exceptions import BotoCoreError, ClientError
 
-    ce = _ce_client(profile)
     try:
+        ce = _ce_client(profile)
         resp = ce.get_cost_and_usage(
             TimePeriod={"Start": start.isoformat(), "End": end.isoformat()},
             Granularity="MONTHLY",

@@ -6,6 +6,7 @@ from datetime import date
 from typing import Any
 
 import pytest
+from botocore.exceptions import ClientError, ProfileNotFound
 
 from granny.analyze import costs as costs_mod
 
@@ -67,3 +68,57 @@ def test_aws_cost_total_sums_range(monkeypatch: pytest.MonkeyPatch) -> None:
     assert total == 42.5
     assert fake.calls[0]["TimePeriod"] == {"Start": "2026-08-01", "End": "2026-08-20"}
     assert "GroupBy" not in fake.calls[0]
+
+
+class RaisingCeClient:
+    """A Cost Explorer client whose call always raises a ClientError."""
+
+    def get_cost_and_usage(self, **kwargs: Any) -> dict[str, Any]:
+        raise ClientError(
+            {"Error": {"Code": "ThrottlingException", "Message": "boom"}},
+            "GetCostAndUsage",
+        )
+
+
+def test_aws_costs_by_service_degrades_gracefully_on_client_error(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(costs_mod, "_ce_client", lambda profile: RaisingCeClient())
+
+    hist = costs_mod.aws_costs_by_service("lularge", months=2, today=date(2026, 8, 20))
+
+    assert hist.months == []
+    assert hist.by_service == {}
+
+
+def test_aws_cost_total_returns_none_on_client_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(costs_mod, "_ce_client", lambda profile: RaisingCeClient())
+
+    total = costs_mod.aws_cost_total("lularge", date(2026, 8, 1), date(2026, 8, 20))
+
+    assert total is None
+
+
+def test_aws_costs_by_service_degrades_gracefully_on_profile_not_found(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def _raise_profile_not_found(profile: str) -> Any:
+        raise ProfileNotFound(profile="bad")
+
+    monkeypatch.setattr(costs_mod, "_ce_client", _raise_profile_not_found)
+
+    hist = costs_mod.aws_costs_by_service("bad", months=2, today=date(2026, 8, 20))
+
+    assert hist.months == []
+    assert hist.by_service == {}
+
+
+def test_aws_cost_total_returns_none_on_profile_not_found(monkeypatch: pytest.MonkeyPatch) -> None:
+    def _raise_profile_not_found(profile: str) -> Any:
+        raise ProfileNotFound(profile="bad")
+
+    monkeypatch.setattr(costs_mod, "_ce_client", _raise_profile_not_found)
+
+    total = costs_mod.aws_cost_total("bad", date(2026, 8, 1), date(2026, 8, 20))
+
+    assert total is None
