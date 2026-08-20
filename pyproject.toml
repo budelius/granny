@@ -111,7 +111,7 @@ all = [
 granny = "granny.cli.main:cli"
 
 [build-system]
-requires = ["hatchling"]
+requires = ["hatchling>=1.14,<1.29"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
@@ -119,6 +119,9 @@ packages = ["granny"]
 
 [tool.hatch.build.targets.sdist]
 include = ["granny"]
+
+[tool.ruff.lint]
+select = ["E4", "E7", "E9", "F"]
 
 # uv-only configuration. PyPI publishes ignore this section -- it activates
 # vault support (Locke) for local editable installs via `uv sync`, without
