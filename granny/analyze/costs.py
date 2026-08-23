@@ -50,6 +50,22 @@ def _month_bounds(today: date | None = None) -> tuple[date, date, date]:
 # ---------------------------------------------------------------------------
 
 
+# Cost Explorer returns every RECORD_TYPE unless filtered. Promotional credits
+# (e.g. AWS Activate) land as negative line items carrying the same SERVICE
+# dimension as the usage they pay for, so an unfiltered query nets a fully
+# credit-covered account to ~0.00 -- both in the total and per service. These
+# helpers report *spend*, so credits and refunds are excluded; callers that
+# track a credit balance model the drawdown separately.
+#
+# Exclusion (Not) rather than a Usage-only whitelist is deliberate: Savings Plan
+# and Reserved Instance coverage arrives under additional record types
+# (DiscountedUsage, SavingsPlanCoveredUsage, ...) that a whitelist would
+# silently drop the moment a commitment is purchased.
+_SPEND_ONLY_FILTER: dict = {
+    "Not": {"Dimensions": {"Key": "RECORD_TYPE", "Values": ["Credit", "Refund"]}}
+}
+
+
 def _ce_client(profile: str) -> "botocore.client.BaseClient":
     """Build a Cost Explorer client for a named AWS profile (us-east-1 global endpoint)."""
     import boto3
@@ -94,6 +110,7 @@ def aws_costs_by_service(
             Granularity="MONTHLY",
             Metrics=["UnblendedCost"],
             GroupBy=[{"Type": "DIMENSION", "Key": "SERVICE"}],
+            Filter=_SPEND_ONLY_FILTER,
         )
         for bucket in resp.get("ResultsByTime", []):
             label = bucket.get("TimePeriod", {}).get("Start", "")[:7]
@@ -128,6 +145,7 @@ def aws_cost_total(profile: str, start: date, end: date) -> float | None:
             TimePeriod={"Start": start.isoformat(), "End": end.isoformat()},
             Granularity="MONTHLY",
             Metrics=["UnblendedCost"],
+            Filter=_SPEND_ONLY_FILTER,
         )
         total = 0.0
         for bucket in resp.get("ResultsByTime", []):
@@ -140,7 +158,6 @@ def aws_cost_total(profile: str, start: date, end: date) -> float | None:
 
 def aws_costs(profiles: list[str] | None = None) -> list[CostSummary]:
     """Month-to-date spend + month-end forecast via Cost Explorer."""
-    import boto3
     from botocore.exceptions import BotoCoreError, ClientError
 
     from granny.analyze.gpus import aws_profiles
@@ -150,8 +167,12 @@ def aws_costs(profiles: list[str] | None = None) -> list[CostSummary]:
     out: list[CostSummary] = []
 
     for profile in profiles:
-        session = boto3.Session(profile_name=profile if profile != "default" else None)
-        ce = session.client("ce", region_name="us-east-1")
+        # Build via _ce_client so tests can substitute a fake client.
+        try:
+            ce = _ce_client(profile)
+        except Exception as e:  # noqa: BLE001 - bad/missing profile must not abort the sweep
+            logger.warning("AWS %s cost client: %s", profile, e)
+            continue
 
         mtd: float | None = None
         currency = "USD"
@@ -160,6 +181,7 @@ def aws_costs(profiles: list[str] | None = None) -> list[CostSummary]:
                 TimePeriod={"Start": start.isoformat(), "End": today.isoformat()},
                 Granularity="MONTHLY",
                 Metrics=["UnblendedCost"],
+                Filter=_SPEND_ONLY_FILTER,
             )
             result = resp.get("ResultsByTime", [])
             if result:
@@ -177,6 +199,7 @@ def aws_costs(profiles: list[str] | None = None) -> list[CostSummary]:
                     TimePeriod={"Start": today.isoformat(), "End": forecast_end.isoformat()},
                     Granularity="MONTHLY",
                     Metric="UNBLENDED_COST",
+                    Filter=_SPEND_ONLY_FILTER,
                 )
                 forecast = (
                     float(resp.get("Total", {}).get("Amount", 0.0)) + (mtd or 0.0)
