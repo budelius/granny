@@ -1095,7 +1095,7 @@ grpc = [
 
 [[package]]
 name = "granny-devops"
-version = "0.18.1"
+version = "0.19.1"
 source = { editable = "." }
 dependencies = [
     { name = "acme" },

@@ -122,3 +122,60 @@ def test_aws_cost_total_returns_none_on_profile_not_found(monkeypatch: pytest.Mo
     total = costs_mod.aws_cost_total("bad", date(2026, 8, 1), date(2026, 8, 20))
 
     assert total is None
+
+
+# ---------------------------------------------------------------------------
+# Credit/refund exclusion
+#
+# Cost Explorer's default (unfiltered) response includes every RECORD_TYPE, so
+# promotional credits arrive as negative line items that cancel the usage they
+# paid for. On a fully credit-covered account that nets every figure to ~0.00,
+# which reads as "we are spending nothing" when the account is in fact burning
+# credits. These helpers report *spend*, so they must exclude Credit/Refund.
+# ---------------------------------------------------------------------------
+
+EXPECTED_FILTER = {"Not": {"Dimensions": {"Key": "RECORD_TYPE", "Values": ["Credit", "Refund"]}}}
+
+
+def test_aws_costs_by_service_excludes_credits(monkeypatch: pytest.MonkeyPatch) -> None:
+    fake = FakeCeClient()
+    monkeypatch.setattr(costs_mod, "_ce_client", lambda profile: fake)
+
+    costs_mod.aws_costs_by_service("lularge", months=2, today=date(2026, 8, 20))
+
+    assert fake.calls[0]["Filter"] == EXPECTED_FILTER
+
+
+def test_aws_cost_total_excludes_credits(monkeypatch: pytest.MonkeyPatch) -> None:
+    fake = FakeCeClient()
+    monkeypatch.setattr(costs_mod, "_ce_client", lambda profile: fake)
+
+    costs_mod.aws_cost_total("lularge", date(2026, 8, 1), date(2026, 8, 20))
+
+    assert fake.calls[0]["Filter"] == EXPECTED_FILTER
+
+
+class FakeForecastCeClient(FakeCeClient):
+    """FakeCeClient that also answers get_cost_forecast."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.forecast_calls: list[dict[str, Any]] = []
+
+    def get_cost_forecast(self, **kwargs: Any) -> dict[str, Any]:
+        self.forecast_calls.append(kwargs)
+        return {"Total": {"Amount": "10.0", "Unit": "USD"}}
+
+
+def test_aws_costs_mtd_and_forecast_exclude_credits(monkeypatch: pytest.MonkeyPatch) -> None:
+    fake = FakeForecastCeClient()
+    monkeypatch.setattr(costs_mod, "_ce_client", lambda profile: fake)
+
+    summaries = costs_mod.aws_costs(["lularge"])
+
+    assert len(summaries) == 1
+    assert summaries[0].mtd_cost == 42.5
+    # Both the MTD query and the forecast must exclude credit/refund lines,
+    # otherwise a credit-covered account forecasts ~0 spend.
+    assert fake.calls[0]["Filter"] == EXPECTED_FILTER
+    assert fake.forecast_calls[0]["Filter"] == EXPECTED_FILTER
