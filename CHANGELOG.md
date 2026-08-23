@@ -8,6 +8,24 @@ Notable changes to granny-devops are documented here.
 
 - Route trusted publish jobs to the protected Obachan staging OSS runner.
 
+## [0.19.1] - 2026-08-23
+
+### Fixed
+
+- Exclude `Credit` and `Refund` record types from all Cost Explorer queries
+  (`aws_costs`, `aws_costs_by_service`, `aws_cost_total`, and the month-end
+  forecast). Cost Explorer returns every record type unless filtered, and
+  promotional credits arrive as negative line items carrying the same `SERVICE`
+  dimension as the usage they offset -- so a fully credit-covered account
+  reported ~0.00 spend both in total and per service, masking real burn.
+  Credits/refunds are excluded via `Not` rather than a `Usage`-only whitelist so
+  that Savings Plan and Reserved Instance record types are not silently dropped
+  once a commitment is purchased.
+- Build the Cost Explorer client in `aws_costs` through `_ce_client` instead of
+  constructing a session inline. The inline session bypassed the seam tests
+  patch, so `aws_costs` unit tests issued real Cost Explorer API calls; a bad or
+  missing profile now degrades to a warning instead of raising mid-sweep.
+
 ## [0.18.0] - 2026-07-26
 
 ### Added
