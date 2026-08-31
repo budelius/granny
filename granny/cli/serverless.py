@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import subprocess
 import sys
@@ -32,13 +33,35 @@ def serverless() -> None:
     """Scaleway Functions (FaaS) management."""
 
 
+_UUID_RE = re.compile(
+    r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", re.I
+)
+
+
+def _looks_like_id(value: str) -> bool:
+    """Scaleway ids are UUIDs; anything else is treated as a name."""
+    return bool(_UUID_RE.match(value.strip()))
+
+
 @serverless.command("list-namespaces")
+@click.option("--json", "as_json", is_flag=True, help="Emit raw JSON for scripting.")
 @region_option
-def list_namespaces(region: str) -> None:
-    """List all function namespaces."""
+def list_namespaces(as_json: bool, region: str) -> None:
+    """List all function namespaces.
+
+    IDs are printed in full. They used to be truncated to 12 characters, which
+    looked tidy and made the output useless: `list-functions` takes a namespace
+    id, so the one field you needed to copy was the one field that was cut.
+    """
     c = _client(region)
-    for ns in c.list_namespaces():
-        click.echo(f"  {ns.get('id', '?')[:12]}  {ns.get('name', '?'):<30} {ns.get('status', '?')}")
+    namespaces = c.list_namespaces()
+    if as_json:
+        click.echo(json.dumps(namespaces, indent=2, sort_keys=True))
+        return
+    for ns in namespaces:
+        click.echo(
+            f"  {ns.get('id', '?'):<38} {ns.get('name', '?'):<30} {ns.get('status', '?')}"
+        )
 
 
 @serverless.command("create-namespace")
@@ -53,14 +76,38 @@ def create_namespace(name: str, description: str, region: str) -> None:
 
 
 @serverless.command("list-functions")
-@click.argument("namespace_id")
+@click.argument("namespace")
+@click.option("--json", "as_json", is_flag=True, help="Emit raw JSON for scripting.")
 @region_option
-def list_functions(namespace_id: str, region: str) -> None:
-    """List functions in a namespace."""
+def list_functions(namespace: str, as_json: bool, region: str) -> None:
+    """List functions in a namespace, by id OR by name.
+
+    Accepting the name matters: `list-namespaces` is where an operator gets the
+    value, and a name is what they actually have in hand. Requiring an id there
+    meant a round-trip through the console for something the client can already
+    resolve.
+    """
     c = _client(region)
-    for fn in c.list_functions(namespace_id):
+    namespace_id = namespace
+    if not _looks_like_id(namespace):
+        found = c.find_namespace(namespace)
+        if not found:
+            raise click.ClickException(
+                f"no namespace named {namespace!r} in {region}. "
+                "Run `granny serverless list-namespaces` to see them."
+            )
+        namespace_id = found["id"]
+
+    functions = c.list_functions(namespace_id)
+    if as_json:
+        click.echo(json.dumps(functions, indent=2, sort_keys=True))
+        return
+    if not functions:
+        click.echo(f"  (no functions in {namespace})")
+        return
+    for fn in functions:
         click.echo(
-            f"  {fn.get('id', '?')[:12]}  {fn.get('name', '?'):<20} "
+            f"  {fn.get('id', '?'):<38} {fn.get('name', '?'):<24} "
             f"runtime={fn.get('runtime', '?')} status={fn.get('status', '?')}"
         )
 
@@ -113,7 +160,8 @@ def create_function(
 @serverless.command("delete-function")
 @click.argument("function_name")
 @click.option(
-    "--namespace", "namespace_name",
+    "--namespace",
+    "namespace_name",
     help="Namespace name. If omitted, the function must be uniquely named across all namespaces.",
 )
 @click.confirmation_option(prompt="Really delete this Scaleway function?")
@@ -151,7 +199,9 @@ def delete_function(
     if not function:
         raise click.ClickException(f"Function '{function_name}' not found")
 
-    click.echo(f"Deleting {function['name']} (id={function['id']}, status={function.get('status', '?')})")
+    click.echo(
+        f"Deleting {function['name']} (id={function['id']}, status={function.get('status', '?')})"
+    )
     c.delete_function(function["id"])
     click.echo("Deleted.")
 
@@ -159,7 +209,9 @@ def delete_function(
 # Patterns that bloat a function package without contributing to runtime.
 # Matches both whole path segments and trailing-name globs.
 _DEFAULT_EXCLUDES = (
-    "*.map", "*.d.ts", "*.d.ts.map",
+    "*.map",
+    "*.d.ts",
+    "*.d.ts.map",
     "node_modules/.cache/*",
     "node_modules/@types/*",
     "node_modules/typescript/*",
@@ -225,21 +277,29 @@ def _parse_secret_pairs(pairs: tuple[str, ...]) -> list[dict]:
 @serverless.command("deploy")
 @click.argument("function_name")
 @click.option(
-    "--source-dir", "source_dir",
+    "--source-dir",
+    "source_dir",
     type=click.Path(exists=True, file_okay=False, path_type=Path),
     required=True,
     help="Directory to package (zipped and uploaded verbatim).",
 )
 @click.option(
-    "--namespace", "namespace_name",
+    "--namespace",
+    "namespace_name",
     help="Namespace name. If omitted, the function must be uniquely named across all namespaces.",
 )
 @click.option(
-    "--env", "env_pairs", multiple=True, metavar="KEY=VALUE",
+    "--env",
+    "env_pairs",
+    multiple=True,
+    metavar="KEY=VALUE",
     help="Non-secret environment variable (repeatable).",
 )
 @click.option(
-    "--secret", "secret_pairs", multiple=True, metavar="KEY=VALUE",
+    "--secret",
+    "secret_pairs",
+    multiple=True,
+    metavar="KEY=VALUE",
     help="Secret environment variable (repeatable).",
 )
 @click.option(
