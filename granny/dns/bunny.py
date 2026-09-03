@@ -61,10 +61,26 @@ class BunnyDNSProvider(DNSProvider):
             return {}
         return resp.json()
 
+    def list_zones(self) -> list[dict]:
+        """Every DNS zone on the account, following pagination to the end.
+
+        Unlike ``/pullzone`` and ``/storagezone``, which answer a bare array,
+        ``/dnszone`` answers a ``{Items, HasMoreItems, ...}`` envelope and
+        pages at 100. Reading only the first page silently truncates.
+        """
+        zones: list[dict] = []
+        page = 1
+        while True:
+            result = self._request("GET", f"/dnszone?page={page}&perPage=100")
+            if not isinstance(result, dict):
+                return list(result)
+            zones.extend(result.get("Items", []))
+            if not result.get("HasMoreItems"):
+                return zones
+            page += 1
+
     def _find_zone(self, zone_name: str) -> dict | None:
-        result = self._request("GET", "/dnszone")
-        zones = result.get("Items", []) if isinstance(result, dict) else result
-        for zone in zones:
+        for zone in self.list_zones():
             if zone.get("Domain") == zone_name:
                 return zone
         return None
