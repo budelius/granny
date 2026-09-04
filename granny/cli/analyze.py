@@ -153,6 +153,11 @@ def vpcs(region: tuple[str, ...], as_json: bool) -> None:
 
 _PROVIDERS = ("aws", "gcp", "azure")
 
+# Only `costs` understands Bunny and Scaleway. `gpus` and `credits` share
+# _PROVIDERS and would offer choices they cannot answer -- neither provider
+# rents GPUs or issues the kind of credit those commands report.
+_COST_PROVIDERS = (*_PROVIDERS, "bunny", "scaleway")
+
 
 def _parse_filter(filter_str: str | None) -> set[str] | None:
     if not filter_str:
@@ -472,9 +477,9 @@ def credits(
 @analyze.command()
 @click.option(
     "--provider",
-    type=click.Choice([*_PROVIDERS, "all"]),
+    type=click.Choice([*_COST_PROVIDERS, "all"]),
     default="all",
-    help="Restrict to one cloud (default: all three)",
+    help="Restrict to one cloud (default: every cloud that reports spend)",
 )
 @click.option("--profile", "profiles", multiple=True, help="AWS profile (repeatable)")
 @click.option(
@@ -486,12 +491,16 @@ def credits(
 @click.option(
     "--subscription", "subscriptions", multiple=True, help="Azure subscription ID (repeatable)"
 )
+@click.option(
+    "--customer", default=None, help="Bunny customer profile (see `granny cdn list-customers`)"
+)
 @click.option("--json-output", "as_json", is_flag=True, help="Output as JSON")
 def costs(
     provider: str,
     profiles: tuple[str, ...],
     billing_accounts: tuple[str, ...],
     subscriptions: tuple[str, ...],
+    customer: str | None,
     as_json: bool,
 ) -> None:
     """Show month-to-date spend and end-of-month forecast per account."""
@@ -499,7 +508,7 @@ def costs(
 
     from granny.analyze import costs as co
 
-    targets = _PROVIDERS if provider == "all" else (provider,)
+    targets = _COST_PROVIDERS if provider == "all" else (provider,)
     rows: list = []
     for p in targets:
         try:
@@ -509,6 +518,10 @@ def costs(
                 rows.extend(co.gcp_costs(billing_accounts=list(billing_accounts) or None))
             elif p == "azure":
                 rows.extend(co.azure_costs(subscriptions=list(subscriptions) or None))
+            elif p == "bunny":
+                rows.extend(co.bunny_costs(customer=customer))
+            elif p == "scaleway":
+                rows.extend(co.scaleway_costs())
         except RuntimeError as e:
             click.echo(f"[{p}] skipped: {e}", err=True)
 

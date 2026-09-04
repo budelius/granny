@@ -17,14 +17,17 @@ SCALEWAY_REGIONS = {
     "fr-par": {
         "name": "Paris, France",
         "functions_api": "https://api.scaleway.com/functions/v1beta1/regions/fr-par",
+        "containers_api": "https://api.scaleway.com/containers/v1beta1/regions/fr-par",
     },
     "nl-ams": {
         "name": "Amsterdam, Netherlands",
         "functions_api": "https://api.scaleway.com/functions/v1beta1/regions/nl-ams",
+        "containers_api": "https://api.scaleway.com/containers/v1beta1/regions/nl-ams",
     },
     "pl-waw": {
         "name": "Warsaw, Poland",
         "functions_api": "https://api.scaleway.com/functions/v1beta1/regions/pl-waw",
+        "containers_api": "https://api.scaleway.com/containers/v1beta1/regions/pl-waw",
     },
 }
 
@@ -35,6 +38,11 @@ SCALEWAY_RUNTIMES = [
 
 class ScalewayFunctionsClient:
     """Scaleway Serverless Functions management."""
+
+    # Which entry of SCALEWAY_REGIONS this client talks to. Functions and
+    # Containers are the same API shape on different base paths, so the
+    # Containers client below is this class with one value changed.
+    _REGION_API = "functions_api"
 
     def __init__(
         self,
@@ -59,7 +67,7 @@ class ScalewayFunctionsClient:
                 f"Unknown region: {region}. Choices: {', '.join(SCALEWAY_REGIONS)}"
             )
 
-        self._api_base = SCALEWAY_REGIONS[region]["functions_api"]
+        self._api_base = SCALEWAY_REGIONS[region][self._REGION_API]
         self.session = requests.Session()
         self.session.headers.update(
             {"X-Auth-Token": self.secret_key, "Content-Type": "application/json"}
@@ -120,6 +128,30 @@ class ScalewayFunctionsClient:
     def list_functions(self, namespace_id: str) -> list[dict]:
         result = self._request("GET", f"/functions?namespace_id={namespace_id}")
         return result.get("functions", [])
+
+    def list_all_functions(self) -> list[dict]:
+        """Every function in the region, across all namespaces.
+
+        An inventory sweep wants the whole region in one call; walking
+        namespaces to reach the same list costs one request per namespace and
+        silently misses anything in a namespace the caller did not enumerate.
+        """
+        return self._paged("/functions", "functions")
+
+    def _paged(self, path: str, key: str, page_size: int = 100) -> list[dict]:
+        """Follow Scaleway's ``page``/``page_size`` pagination to the end."""
+        items: list[dict] = []
+        page = 1
+        sep = "&" if "?" in path else "?"
+        while True:
+            result = self._request("GET", f"{path}{sep}page={page}&page_size={page_size}")
+            batch = result.get(key, [])
+            items.extend(batch)
+            # total_count is the count across all pages, so it is the only
+            # honest stop condition; a short final page is not guaranteed.
+            if not batch or len(items) >= (result.get("total_count") or 0):
+                return items
+            page += 1
 
     def find_function(self, namespace_id: str, name: str) -> dict | None:
         for fn in self.list_functions(namespace_id):
@@ -262,3 +294,28 @@ class ScalewayFunctionsClient:
         if args:
             data["args"] = json.dumps(args)
         return self._request("POST", "/triggers", data)
+
+
+class ScalewayContainersClient(ScalewayFunctionsClient):
+    """Scaleway Serverless Containers, read paths.
+
+    Containers and Functions are the same API shape on different base paths, so
+    the inherited credential handling, ``_request`` and pagination apply
+    unchanged. Only the read paths are exposed here: containers are deployed
+    from their own application pipelines, not from granny, so the write half of
+    the Functions client would be dead code with a live blast radius.
+    """
+
+    _REGION_API = "containers_api"
+
+    def list_namespaces(self) -> list[dict]:
+        result = self._request("GET", f"/namespaces?project_id={self.project_id}")
+        return result.get("namespaces", [])
+
+    def list_containers(self, namespace_id: str) -> list[dict]:
+        result = self._request("GET", f"/containers?namespace_id={namespace_id}")
+        return result.get("containers", [])
+
+    def list_all_containers(self) -> list[dict]:
+        """Every container in the region, across all namespaces."""
+        return self._paged("/containers", "containers")
