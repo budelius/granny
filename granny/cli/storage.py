@@ -29,12 +29,19 @@ def bunny_list(customer: str | None) -> None:
     if not zones:
         click.echo("No storage zones found.")
         return
-    for z in zones:
+    for z in sorted(zones, key=lambda z: -(z.get("StorageUsed") or 0)):
+        used_gb = (z.get("StorageUsed") or 0) / 1e9
         click.echo(
             f"  {z['Id']:<10} {z['Name']:<30} "
             f"Region={z.get('Region', '?')} "
+            f"Used={used_gb:.3f}G "
             f"Files={z.get('FilesStored', 0)}"
         )
+    # Bunny bills storage as one account-level figure, so no per-zone price
+    # exists to print here.
+    click.echo(
+        "\nStorage is billed account-wide; see `granny analyze costs --provider bunny`."
+    )
 
 
 @bunny_storage.command("create")

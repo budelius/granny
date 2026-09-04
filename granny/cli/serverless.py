@@ -20,6 +20,12 @@ def _client(region: str):
     return ScalewayFunctionsClient(region=region)
 
 
+def _containers_client(region: str):
+    from granny.serverless.scaleway import ScalewayContainersClient
+
+    return ScalewayContainersClient(region=region)
+
+
 region_option = click.option(
     "--region",
     default="fr-par",
@@ -73,6 +79,63 @@ def create_namespace(name: str, description: str, region: str) -> None:
     c = _client(region)
     result = c.create_namespace(name, description=description)
     click.echo(f"Namespace created: {result.get('id')} ({result.get('name')})")
+
+
+@serverless.command("list-deployments")
+@region_option
+def list_deployments(region: str) -> None:
+    """List every function and container in the region.
+
+    One sweep across both products, because "what is deployed on Scaleway"
+    is rarely a question about only one of them.
+    """
+    functions = _client(region).list_all_functions()
+    containers = _containers_client(region).list_all_containers()
+    if not functions and not containers:
+        click.echo(f"No functions or containers in {region}.")
+        return
+
+    click.echo(f"  {'Kind':<10} {'Name':<38} {'Status':<10} {'Runtime':<10} Memory")
+    for fn in sorted(functions, key=lambda f: f.get("name", "")):
+        click.echo(
+            f"  {'function':<10} {fn.get('name', ''):<38} {fn.get('status', ''):<10} "
+            f"{fn.get('runtime', '') or '-':<10} {fn.get('memory_limit', 0)}MB"
+        )
+    for ct in sorted(containers, key=lambda c: c.get("name", "")):
+        click.echo(
+            f"  {'container':<10} {ct.get('name', ''):<38} {ct.get('status', ''):<10} "
+            f"{'-':<10} {ct.get('memory_limit', 0)}MB"
+        )
+    click.echo(
+        f"\n  {len(functions)} function(s), {len(containers)} container(s) in {region}."
+    )
+    # Scaleway bills per SKU per project, so no line above can carry a price.
+    click.echo(
+        "  Spend is per-SKU, not per-deployment: "
+        "`granny analyze costs --provider scaleway`."
+    )
+
+
+@serverless.command("list-containers")
+@click.option("--json", "as_json", is_flag=True, help="Emit raw JSON for scripting.")
+@region_option
+def list_containers(as_json: bool, region: str) -> None:
+    """List all serverless containers.
+
+    IDs print in full for the same reason they do in `list-namespaces`: a
+    truncated id is the one field you cannot paste into the next command.
+    """
+    containers = _containers_client(region).list_all_containers()
+    if as_json:
+        click.echo(json.dumps(containers, indent=2, sort_keys=True))
+        return
+    if not containers:
+        click.echo(f"  (no containers in {region})")
+        return
+    for ct in containers:
+        click.echo(
+            f"  {ct.get('id', '?'):<38} {ct.get('name', '?'):<30} {ct.get('status', '?')}"
+        )
 
 
 @serverless.command("list-functions")
