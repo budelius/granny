@@ -335,3 +335,92 @@ def azure_costs(subscriptions: list[str] | None = None) -> list[CostSummary]:
             )
         )
     return out
+
+
+# ---------------------------------------------------------------------------
+# Usage-billed providers
+# ---------------------------------------------------------------------------
+#
+# Bunny and Scaleway both expose real month-to-date spend, so neither needs the
+# run-rate reconstruction Hetzner requires. Neither offers a forecast endpoint,
+# so both derive one the same way: scale month-to-date by how much of the month
+# has elapsed. That is a straight-line projection, not the provider's opinion,
+# and the note on each row says so.
+
+
+def _straight_line_eom(mtd: float, today: date | None = None) -> float:
+    """Project month-to-date spend to month end, pro rata by elapsed days.
+
+    Counts today as elapsed, so the first of the month projects from one day of
+    data rather than dividing by zero.
+    """
+    start, today, end = _month_bounds(today)
+    elapsed = (today - start).days + 1
+    days_in_month = (end - start).days
+    return mtd / elapsed * days_in_month
+
+
+def bunny_costs(customer: str | None = None) -> list[CostSummary]:
+    """Month-to-date Bunny spend, from the prepaid balance drawdown.
+
+    Bunny is prepaid: ``ThisMonthCharges`` is what this month has drawn against
+    a balance already paid in. The remaining balance rides along in the note,
+    because on a prepaid account "how much is left" is the question that
+    actually causes an outage.
+    """
+    from granny.bunny.billing import BunnyBillingClient
+
+    start, _today, end = _month_bounds()
+    try:
+        client = BunnyBillingClient(customer=customer)
+        billing = client.get_billing()
+    except Exception as e:  # noqa: BLE001 - one provider must not abort a sweep
+        logger.warning("Bunny billing: %s", e)
+        return []
+
+    mtd = client.month_to_date(billing)
+    balance = client.balance(billing)
+    note = f"Prepaid; balance EUR {balance:,.2f} remaining. Forecast is straight-line."
+    return [
+        CostSummary(
+            provider="bunny",
+            account=customer or "default",
+            currency="EUR",
+            period_start=start.isoformat(),
+            period_end=end.isoformat(),
+            mtd_cost=mtd,
+            forecast_eom=_straight_line_eom(mtd),
+            note=note,
+        )
+    ]
+
+
+def scaleway_costs(organization_id: str | None = None) -> list[CostSummary]:
+    """Month-to-date Scaleway spend, net of free-tier discounts.
+
+    Scaleway reports consumption per SKU per project, so this total is real but
+    cannot be broken down per resource. The discount lines arrive negative and
+    are already included.
+    """
+    from granny.scaleway.billing import ScalewayBillingClient
+
+    start, _today, end = _month_bounds()
+    try:
+        client = ScalewayBillingClient(organization_id=organization_id)
+        mtd, currency = client.month_to_date()
+    except Exception as e:  # noqa: BLE001 - one provider must not abort a sweep
+        logger.warning("Scaleway billing: %s", e)
+        return []
+
+    return [
+        CostSummary(
+            provider="scaleway",
+            account=client.organization_id,
+            currency=currency,
+            period_start=start.isoformat(),
+            period_end=end.isoformat(),
+            mtd_cost=mtd,
+            forecast_eom=_straight_line_eom(mtd),
+            note="Per-SKU billing; no per-resource split. Forecast is straight-line.",
+        )
+    ]

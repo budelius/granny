@@ -19,6 +19,12 @@ def _client(region: str):
     return ScalewayFunctionsClient(region=region)
 
 
+def _containers_client(region: str):
+    from granny.serverless.scaleway import ScalewayContainersClient
+
+    return ScalewayContainersClient(region=region)
+
+
 region_option = click.option(
     "--region",
     default="fr-par",
@@ -39,6 +45,48 @@ def list_namespaces(region: str) -> None:
     c = _client(region)
     for ns in c.list_namespaces():
         click.echo(f"  {ns.get('id', '?')[:12]}  {ns.get('name', '?'):<30} {ns.get('status', '?')}")
+
+
+@serverless.command("list-deployments")
+@region_option
+def list_deployments(region: str) -> None:
+    """List every function and container in the region.
+
+    One sweep across both products, because "what is deployed on Scaleway"
+    is rarely a question about only one of them.
+    """
+    functions = _client(region).list_all_functions()
+    containers = _containers_client(region).list_all_containers()
+    if not functions and not containers:
+        click.echo(f"No functions or containers in {region}.")
+        return
+
+    click.echo(f"  {'Kind':<10} {'Name':<38} {'Status':<10} {'Runtime':<10} Memory")
+    for fn in sorted(functions, key=lambda f: f.get("name", "")):
+        click.echo(
+            f"  {'function':<10} {fn.get('name', ''):<38} {fn.get('status', ''):<10} "
+            f"{fn.get('runtime', '') or '-':<10} {fn.get('memory_limit', 0)}MB"
+        )
+    for ct in sorted(containers, key=lambda c: c.get("name", "")):
+        click.echo(
+            f"  {'container':<10} {ct.get('name', ''):<38} {ct.get('status', ''):<10} "
+            f"{'-':<10} {ct.get('memory_limit', 0)}MB"
+        )
+    click.echo(
+        f"\n  {len(functions)} function(s), {len(containers)} container(s) in {region}."
+    )
+    # Scaleway bills per SKU per project, so no line above can carry a price.
+    click.echo("  Spend is per-SKU, not per-deployment: `granny analyze costs --provider scaleway`.")
+
+
+@serverless.command("list-containers")
+@region_option
+def list_containers(region: str) -> None:
+    """List all serverless containers."""
+    for ct in _containers_client(region).list_all_containers():
+        click.echo(
+            f"  {ct.get('id', '?')[:12]}  {ct.get('name', '?'):<34} {ct.get('status', '?')}"
+        )
 
 
 @serverless.command("create-namespace")
