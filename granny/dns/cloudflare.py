@@ -18,6 +18,10 @@ from granny.dns.records import DNSRecord
 logger = logging.getLogger(__name__)
 
 API_BASE = "https://api.cloudflare.com/client/v4"
+# Cloudflare's maximum page size for list endpoints.
+PAGE_SIZE = 100
+# Safety stop, so a provider that keeps reporting more pages cannot spin here.
+MAX_PAGES = 100
 
 
 class CloudflareDNSProvider(DNSProvider):
@@ -52,6 +56,42 @@ class CloudflareDNSProvider(DNSProvider):
             errors = body.get("errors", [])
             raise RuntimeError(f"Cloudflare {method} {path} error: {errors}")
         return body
+
+    def _get_all_pages(self, path: str, params: dict | None = None) -> list[dict]:
+        """GET every page of a paginated collection, not just the first.
+
+        Cloudflare caps a page at 100 items and reports the real total in
+        ``result_info``. Asking for ``per_page=100`` and returning
+        ``body["result"]`` therefore looks correct on small zones and silently
+        drops everything past the first page on large ones -- a zone of 123
+        records answered with 100, and the 23 that never arrived read to callers
+        as records that do not exist. Zone size is not something a caller can be
+        expected to check, so the loop belongs here.
+        """
+        base = dict(params or {})
+        base.setdefault("per_page", PAGE_SIZE)
+        out: list[dict] = []
+        page = 1
+        while True:
+            # A fresh dict per request: reusing one and reassigning "page"
+            # hands requests (and any test double) the same object every time,
+            # so what a caller later inspects is the last page number, not the
+            # one that request actually carried.
+            body = self._request("GET", path, params={**base, "page": page})
+            out.extend(body.get("result") or [])
+            info = body.get("result_info") or {}
+            total_pages = int(info.get("total_pages") or 1)
+            if page >= total_pages or page >= MAX_PAGES:
+                if page >= MAX_PAGES and page < total_pages:
+                    logger.warning(
+                        "Cloudflare %s: stopped at %d pages (%d reported); "
+                        "results are incomplete",
+                        path,
+                        MAX_PAGES,
+                        total_pages,
+                    )
+                return out
+            page += 1
 
     def get_zone_id(self, zone_name: str) -> str:
         if zone_name in self._zone_cache:
@@ -149,14 +189,14 @@ class CloudflareDNSProvider(DNSProvider):
         name: str | None = None,
         record_type: str | None = None,
     ) -> list[DNSRecord]:
-        params: dict[str, Any] = {"per_page": 100}
+        params: dict[str, Any] = {}
         if record_type:
             params["type"] = record_type.upper()
         if name is not None:
             params["name"] = self._fqdn(zone_id, name)
-        body = self._request("GET", f"/zones/{zone_id}/dns_records", params=params)
+        records = self._get_all_pages(f"/zones/{zone_id}/dns_records", params)
         out: list[DNSRecord] = []
-        for rec in body.get("result") or []:
+        for rec in records:
             out.append(
                 DNSRecord(
                     name=rec.get("name", ""),
