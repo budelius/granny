@@ -5,6 +5,9 @@ Resolution order for each secret:
   1. Environment variable (from ``.env``, ``.deploy.env``, or shell) — explicit wins
   2. Vaultwarden vault via Locke — only if the optional ``[vault]`` extra is
      installed and a vault session is reachable
+  3. Locke OS keystore — including the ``OBACHAN_<ENV>_<NAME>`` entries obachan
+     stores, so a session that cannot reach Vaultwarden (locked workstation,
+     non-interactive shell where Windows Hello cannot prompt) still resolves
 
 Without the ``[vault]`` extra, secrets are env-var only — the vault-related
 helpers are no-ops that return ``None``. Install with vault support via::
@@ -196,6 +199,33 @@ SECRET_MAP: dict[str, str] = {
     "OBACHAN_BAO_TOKEN": "obachan-bao-token",
 }
 
+# Map env var name -> the name the same secret carries in the Locke OS keystore.
+#
+# Vaultwarden is not the only place these live. obachan stores the same
+# infrastructure credentials in the OS keystore under its own namespace,
+# ``OBACHAN_<ENV>_<NAME>`` (see obachan's runners/locke_resolver._namespaced),
+# and its object-storage pair is documented as holding Hetzner Object Storage
+# credentials. A session that cannot reach Vaultwarden -- a locked
+# workstation, a non-interactive shell where Windows Hello cannot prompt, a
+# stale locke pin -- can still answer from the keystore, so it is worth asking
+# before giving up.
+#
+# Values are the un-namespaced obachan name; ``_keystore_candidates`` expands
+# them across environments.
+KEYSTORE_ALIASES: dict[str, str] = {
+    "HETZNER_S3_ACCESS_KEY": "S3_ACCESS_KEY",
+    "HETZNER_S3_SECRET_KEY": "S3_SECRET_KEY",
+    "CLOUDFLARE_API_TOKEN": "CLOUDFLARE_API_TOKEN",
+    "INWX_USERNAME": "INWX_USERNAME",
+    "INWX_PASSWORD": "INWX_PASSWORD",
+    "INWX_SHARED_SECRET": "INWX_SHARED_SECRET",
+}
+
+#: Environments to try, in order, when expanding a keystore alias. Override
+#: with ``GRANNY_KEYSTORE_ENV`` to pin one -- worth doing deliberately, since
+#: the default reaches production credentials first.
+KEYSTORE_ENV_ORDER = ("prod", "prod1", "staging", "dev2")
+
 # Module-level cache so vault is only contacted once per process
 _cache: dict[str, str | None] = {}
 _vault_client = None
@@ -285,13 +315,62 @@ def _fetch_from_vault(env_var: str) -> str | None:
         return None
 
 
+def _keystore_candidates(env_var: str) -> list[str]:
+    """Names to try in the Locke keystore for ``env_var``, most specific first.
+
+    The credential's own name comes first: a keystore entry stored under
+    exactly what the caller asked for should always win over a namespaced
+    guess.
+    """
+    candidates = [env_var]
+    alias = KEYSTORE_ALIASES.get(env_var)
+    if alias:
+        pinned = os.environ.get("GRANNY_KEYSTORE_ENV", "").strip()
+        envs = (pinned,) if pinned else KEYSTORE_ENV_ORDER
+        candidates.extend(f"OBACHAN_{env.upper()}_{alias}" for env in envs if env)
+    return candidates
+
+
+def _fetch_from_keystore(env_var: str) -> str | None:
+    """Resolve a secret from the Locke OS keystore.
+
+    Returns None when locke is absent or nothing matches. A keystore that
+    cannot be *consulted* -- biometric gating with no way to prompt -- is
+    reported as a miss here rather than raised: the vault backend below may
+    still answer, and this backend exists to add a source, never to remove one.
+    """
+    try:
+        from locke.keystore import get_credential
+    except ImportError:
+        logger.debug("locke not installed — keystore backend disabled")
+        return None
+
+    for name in _keystore_candidates(env_var):
+        try:
+            value = get_credential(name)
+        except Exception as exc:  # keystore unavailable, biometric denied, ...
+            logger.debug("Keystore lookup failed for %s: %s", name, exc)
+            return None
+        if value:
+            if name != env_var:
+                # Say which entry answered. A credential arriving under a
+                # namespaced alias -- possibly a production one -- should
+                # never be silent about where it came from.
+                logger.info(
+                    "Resolved %s from OS keystore entry %r", env_var, name
+                )
+            return value
+    return None
+
+
 def get_secret(env_var: str) -> str | None:
     """Get a secret by its environment variable name.
 
     Resolution order:
-      1. Process cache (avoids repeated vault lookups)
+      1. Process cache (avoids repeated lookups)
       2. Environment variable / .env / .deploy.env (explicit wins)
       3. Vaultwarden vault via Locke (only if [vault] extra installed)
+      4. Locke OS keystore, including obachan-namespaced aliases
 
     Args:
         env_var: The environment variable name (e.g. "BUNNY_API_KEY").
@@ -311,6 +390,16 @@ def get_secret(env_var: str) -> str | None:
     # Fall back to vault (only for registered secrets, only if locke installed)
     if env_var in SECRET_MAP:
         value = _fetch_from_vault(env_var)
+        if value:
+            _cache[env_var] = value
+            return value
+
+    # Keystore last, so this backend only ever adds an answer where there was
+    # none. Placing it ahead of Vaultwarden would quietly re-point every
+    # already-working secret at a different store, which is not a change worth
+    # making as a side effect of teaching granny one new lookup.
+    if env_var in SECRET_MAP or env_var in KEYSTORE_ALIASES:
+        value = _fetch_from_keystore(env_var)
         if value:
             _cache[env_var] = value
             return value
