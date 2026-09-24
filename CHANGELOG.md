@@ -4,6 +4,8 @@ Notable changes to granny-devops are documented here.
 
 ## [Unreleased]
 
+## [0.20.0] - 2026-09-24
+
 ### Added
 
 - Resolve registered secrets from the Locke OS keystore when the environment
@@ -76,6 +78,7 @@ Notable changes to granny-devops are documented here.
 - Add dry-run-by-default `granny airtable replace-text`, with explicit `--apply --confirm` safeguards.
 - Register `AIRTABLE_API_KEY` for environment and Vaultwarden credential resolution.
 
-[Unreleased]: https://gitlab.com/martin-wieser/granny/-/compare/v0.18.0...main
+[Unreleased]: https://gitlab.com/martin-wieser/granny/-/compare/v0.20.0...main
+[0.20.0]: https://gitlab.com/martin-wieser/granny/-/compare/v0.18.0...v0.20.0
 [0.18.0]: https://gitlab.com/martin-wieser/granny/-/compare/v0.17.4...v0.18.0
 [0.17.4]: https://gitlab.com/martin-wieser/granny/-/compare/v0.17.3...v0.17.4
