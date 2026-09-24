@@ -10,6 +10,7 @@ import time
 
 import boto3
 from botocore.config import Config
+from botocore.exceptions import ClientError
 
 from granny.credentials.secrets import get_secret
 
@@ -82,20 +83,56 @@ class HetznerS3Client:
         logger.info("Set public-read policy on %s", bucket_name)
 
     def set_cors_config(
-        self, bucket_name: str, origins: list[str] | None = None
+        self,
+        bucket_name: str,
+        origins: list[str] | None = None,
+        methods: list[str] | None = None,
+        expose_headers: list[str] | None = None,
+        max_age_seconds: int = 3600,
     ) -> None:
-        cors = {
-            "CORSRules": [
-                {
-                    "AllowedHeaders": ["*"],
-                    "AllowedMethods": ["GET", "HEAD"],
-                    "AllowedOrigins": origins or ["*"],
-                    "MaxAgeSeconds": 3600,
-                }
-            ]
+        """Replace the bucket's CORS policy.
+
+        ``methods`` defaults to read-only access. Pass ``PUT`` for a bucket
+        that browsers upload to directly: an app handed a presigned URL sends
+        the bytes from the page itself, so the hop is cross-origin, and a PUT
+        is never a CORS-simple request. The browser preflights it, and without
+        a matching rule it refuses to send the upload at all -- surfacing as a
+        bare network error with no status code, which reads like a
+        connectivity fault rather than a policy one.
+
+        ``expose_headers`` is what the page is allowed to read back; ``ETag``
+        is the one a multipart or resumable upload needs.
+        """
+        rule: dict[str, object] = {
+            "AllowedHeaders": ["*"],
+            "AllowedMethods": methods or ["GET", "HEAD"],
+            "AllowedOrigins": origins or ["*"],
+            "MaxAgeSeconds": max_age_seconds,
         }
-        self.client.put_bucket_cors(Bucket=bucket_name, CORSConfiguration=cors)
-        logger.info("CORS configured on %s", bucket_name)
+        if expose_headers:
+            rule["ExposeHeaders"] = expose_headers
+        self.client.put_bucket_cors(
+            Bucket=bucket_name, CORSConfiguration={"CORSRules": [rule]}
+        )
+        logger.info(
+            "CORS configured on %s (methods=%s, origins=%s)",
+            bucket_name,
+            rule["AllowedMethods"],
+            rule["AllowedOrigins"],
+        )
+
+    def get_cors_config(self, bucket_name: str) -> list[dict] | None:
+        """Return the bucket's CORS rules, or None when it has no policy.
+
+        The distinction matters: an empty list is a policy that allows
+        nothing, while None means the store has never been told anything.
+        """
+        try:
+            return self.client.get_bucket_cors(Bucket=bucket_name).get("CORSRules", [])
+        except ClientError as exc:
+            if exc.response.get("Error", {}).get("Code") == "NoSuchCORSConfiguration":
+                return None
+            raise
 
     def upload_file(
         self,
