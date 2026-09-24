@@ -4,8 +4,36 @@ Notable changes to granny-devops are documented here.
 
 ## [Unreleased]
 
+### Added
+
+- Resolve registered secrets from the Locke OS keystore when the environment
+  and Vaultwarden have both missed. Vaultwarden is unreachable from a locked
+  workstation or any non-interactive shell, because Windows Hello cannot prompt
+  for the vault password there -- but the credentials are not actually absent
+  in those sessions: obachan keeps the same infrastructure values in the OS
+  keystore under `OBACHAN_<ENV>_<NAME>`, and its object-storage pair holds
+  Hetzner Object Storage credentials. `KEYSTORE_ALIASES` maps a granny name to
+  its obachan counterpart and `KEYSTORE_ENV_ORDER` expands it across
+  environments; `GRANNY_KEYSTORE_ENV` pins one. The backend runs last, so it
+  only ever adds an answer where there was none rather than re-pointing an
+  already-working secret at a different store, and it logs which entry
+  answered, since a credential arriving under a namespaced alias may be a
+  production one.
+- Add `HetznerS3Client.get_cors_config`, which distinguishes a bucket that has
+  never been given a CORS policy (`None`) from one whose policy allows nothing
+  (`[]`).
+
 ### Changed
 
+- Let `HetznerS3Client.set_cors_config` take `methods`, `expose_headers` and
+  `max_age_seconds`. It could previously only express `GET` and `HEAD`, so it
+  could not configure a bucket that browsers upload to directly: an app handed
+  a presigned URL sends the bytes from the page, making the hop cross-origin,
+  and a `PUT` is never a CORS-simple request. The browser preflights it and,
+  with no matching rule, refuses to send the upload at all -- surfacing as a
+  bare network error carrying no status code, which reads like a connectivity
+  fault rather than a policy one. The previous read-only behaviour remains the
+  default.
 - Route trusted publish jobs to the protected Obachan staging OSS runner.
 
 ## [0.19.1] - 2026-08-23
