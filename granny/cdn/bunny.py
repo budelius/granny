@@ -191,6 +191,57 @@ class BunnyCDNClient:
         )
         logger.info("SPA error page configured on pull zone %s", pull_zone_id)
 
+    def configure_spa_cache_headers(
+        self,
+        pull_zone_id: int,
+        asset_path: str = "*/assets/*",
+        asset_max_age: int = 2592000,
+    ) -> None:
+        """Stop browsers pinning a single-page app to a stale build.
+
+        A pull zone's ``CacheControlMaxAgeOverride`` applies one ``max-age`` to
+        every response, ``index.html`` included. That is the one file which
+        must never be cached: it is the map from a URL to the content-hashed
+        chunk names, so a browser holding an old copy keeps requesting the
+        previous build's filenames -- which the origin still serves -- and runs
+        stale code until the header expires. Purging the CDN does not help; the
+        browser has been told not to ask.
+
+        So default the zone to no browser caching and hand the long cache back
+        to the hashed assets alone, by path rather than by extension: in a SPA
+        every route returns HTML, and ``/invoice-upload`` looks nothing like
+        ``*.html``. Matching what is safe to cache is reliable in a way that
+        enumerating what is not never becomes.
+        """
+        self.update_pull_zone(pull_zone_id, CacheControlPublicMaxAgeOverride=0)
+        self.add_or_update_edge_rule(
+            pull_zone_id,
+            {
+                "ActionType": 16,  # OverrideBrowserCacheTime
+                "ActionParameter1": str(asset_max_age),
+                "Triggers": [
+                    {
+                        "Type": 0,  # Url
+                        "PatternMatchingType": 0,  # MatchAny
+                        "PatternMatches": [asset_path],
+                    }
+                ],
+                "TriggerMatchingType": 0,
+                "Description": (
+                    "Content-hashed assets may be cached by the browser; "
+                    "index.html and SPA routes must not be."
+                ),
+                "Enabled": True,
+            },
+        )
+        logger.info(
+            "SPA cache headers configured on pull zone %s "
+            "(no browser cache by default, %ss for %s)",
+            pull_zone_id,
+            asset_max_age,
+            asset_path,
+        )
+
     def configure_spa_routing(self, storage_zone_id: int) -> None:
         """Configure SPA routing on a Bunny storage zone (404 -> /index.html)."""
         self._request(

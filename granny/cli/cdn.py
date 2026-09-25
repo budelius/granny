@@ -139,6 +139,50 @@ def list_edge_rules(pull_zone_id: int, customer: str | None) -> None:
         )
 
 
+@cdn.command("spa-cache-headers")
+@click.argument("pull_zone_id", type=int)
+@click.option(
+    "--asset-path",
+    default="*/assets/*",
+    show_default=True,
+    help="URL pattern for content-hashed assets, the only files safe to cache.",
+)
+@click.option(
+    "--asset-max-age",
+    type=int,
+    default=2592000,
+    show_default=True,
+    help="Browser cache lifetime, in seconds, for those assets.",
+)
+@click.option("--purge/--no-purge", default=True, help="Purge the zone afterwards.")
+@customer_option
+def spa_cache_headers(
+    pull_zone_id: int,
+    asset_path: str,
+    asset_max_age: int,
+    purge: bool,
+    customer: str | None,
+) -> None:
+    """Stop browsers pinning a single-page app to a stale build.
+
+    Bunny applies one max-age to every response, index.html included -- so a
+    returning browser keeps asking for the previous build's chunk filenames and
+    runs stale code, no matter how often the CDN is purged. This defaults the
+    zone to no browser caching and gives the long cache back to the
+    content-hashed assets alone.
+    """
+    c = _client(customer)
+    c.configure_spa_cache_headers(
+        pull_zone_id, asset_path=asset_path, asset_max_age=asset_max_age
+    )
+    if purge:
+        c.purge_cache(pull_zone_id)
+    click.echo(
+        f"Pull zone {pull_zone_id}: browser cache off by default, "
+        f"{asset_max_age}s for {asset_path}."
+    )
+
+
 @cdn.command("add-redirect")
 @click.argument("pull_zone_id", type=int)
 @click.argument("from_pattern")
