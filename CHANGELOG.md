@@ -4,6 +4,21 @@ Notable changes to granny-devops are documented here.
 
 ## [Unreleased]
 
+### Added
+
+- Add `granny cdn spa-cache-headers` and
+  `BunnyCDNClient.configure_spa_cache_headers`, which stop browsers pinning a
+  single-page app to a stale build. A pull zone's `CacheControlMaxAgeOverride`
+  applies one `max-age` to every response, `index.html` included -- and that
+  is the one file which must never be cached, being the map from a URL to the
+  content-hashed chunk names. A browser holding an old copy keeps requesting
+  the previous build's filenames, which the origin still serves, and runs
+  stale code until the header expires; purging the CDN does not help, because
+  the browser has been told not to ask. The zone now defaults to no browser
+  caching, and the long cache is handed back to the hashed assets alone --
+  matched by path rather than by extension, since in a SPA every route
+  returns HTML and `/invoice-upload` looks nothing like `*.html`.
+
 ## [0.20.0] - 2026-09-24
 
 ### Added
